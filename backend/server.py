@@ -186,14 +186,20 @@ def pdf_to_images():
     try:
         file.save(str(pdf_path))
 
-        # Use pdf2image (poppler-utils)
+        # Use pdf2image (requires poppler-utils)
         try:
             from pdf2image import convert_from_path
             dpi = int(request.args.get('dpi', 150))
             images = convert_from_path(str(pdf_path), dpi=dpi)
-        except Exception:
-            # Fallback to pikepdf + Pillow
-            images = _pdf_to_images_pikepdf(pdf_path)
+        except Exception as e:
+            # Check if poppler-utils is missing
+            if not shutil.which('pdftoppm'):
+                # Fallback to pikepdf + Pillow
+                images = _pdf_to_images_pikepdf(pdf_path)
+                if not images:
+                    return jsonify({'error': 'poppler-utils not installed. Run: sudo apt install poppler-utils. Or PDF has no embedded images.'}), 500
+            else:
+                images = _pdf_to_images_pikepdf(pdf_path)
 
         if not images:
             return jsonify({'error': 'No pages extracted'}), 500
@@ -396,7 +402,6 @@ def compress():
             compress_streams=True,
             stream_decode_level=decode_level,
             object_stream_mode=pikepdf.ObjectStreamMode.generate,
-            normalize_content=True,
             linearize=True,
         )
         pdf.close()
@@ -427,20 +432,28 @@ def repair_pdf():
         return jsonify({'error': 'Missing file'}), 400
 
     file = request.files['file']
+    import tempfile, os
+    tmp_path = None
     try:
         import pikepdf
-        input_bytes = file.read()
-        pdf = pikepdf.Pdf.open(io.BytesIO(input_bytes), allow_overwriting_input=True)
+        # Save to temp file (allow_overwriting_input needs a real path)
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
+            tmp.write(file.read())
+            tmp_path = tmp.name
+
+        pdf = pikepdf.Pdf.open(tmp_path, allow_overwriting_input=True)
         output = io.BytesIO()
         pdf.save(output, compress_streams=True,
-                 object_stream_mode=pikepdf.ObjectStreamMode.generate,
-                 normalize_content=True)
+                 object_stream_mode=pikepdf.ObjectStreamMode.generate)
         pdf.close()
         output.seek(0)
         return send_file(output, mimetype='application/pdf', as_attachment=True,
                         download_name=file.filename.replace('.pdf', '_repaired.pdf'))
     except Exception as e:
         return jsonify({'error': f'Cannot repair: {str(e)}'}), 500
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 # ============================================================
 # MAIN
