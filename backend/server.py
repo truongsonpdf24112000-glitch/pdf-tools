@@ -418,6 +418,31 @@ def compress():
         return jsonify({'error': str(e)}), 500
 
 # ============================================================
+# REPAIR PDF — Sửa file PDF bị lỗi
+# ============================================================
+@app.route('/repair', methods=['POST'])
+def repair_pdf():
+    """Repair corrupted PDF using pikepdf"""
+    if 'file' not in request.files:
+        return jsonify({'error': 'Missing file'}), 400
+
+    file = request.files['file']
+    try:
+        import pikepdf
+        input_bytes = file.read()
+        pdf = pikepdf.Pdf.open(io.BytesIO(input_bytes), allow_overwriting_input=True)
+        output = io.BytesIO()
+        pdf.save(output, compress_streams=True,
+                 object_stream_mode=pikepdf.ObjectStreamMode.generate,
+                 normalize_content=True)
+        pdf.close()
+        output.seek(0)
+        return send_file(output, mimetype='application/pdf', as_attachment=True,
+                        download_name=file.filename.replace('.pdf', '_repaired.pdf'))
+    except Exception as e:
+        return jsonify({'error': f'Cannot repair: {str(e)}'}), 500
+
+# ============================================================
 # MAIN
 # ============================================================
 if __name__ == '__main__':

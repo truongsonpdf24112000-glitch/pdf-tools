@@ -1223,3 +1223,118 @@ input[type="checkbox"] {
   padding: 6px 14px;
   font-size: 0.8rem;
 }
+
+/* ===== Compare PDF Tool ===== */
+.compare-dual {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.compare-side {
+  flex: 1;
+}
+
+.compare-side .upload-zone {
+  padding: 40px 20px;
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.compare-vs {
+  font-size: 1.5rem;
+  font-weight: 900;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.diff-list {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.diff-line {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8rem;
+}
+
+.diff-line:last-child { border-bottom: none; }
+
+.diff-num {
+  width: 40px;
+  padding: 6px 8px;
+  text-align: right;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  flex-shrink: 0;
+  background: var(--bg-input);
+  border-right: 1px solid var(--border);
+}
+
+.diff-content {
+  flex: 1;
+  padding: 6px 10px;
+  overflow-x: auto;
+}
+
+.diff-a, .diff-b {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.diff-a { color: var(--danger); }
+.diff-b { color: var(--success); }
+
+.diff-match .diff-a, .diff-match .diff-b { color: var(--text-primary); }
+.diff-match { background: rgba(0,200,83,0.05); }
+.diff-changed { background: rgba(255,165,0,0.08); }
+.diff-added { background: rgba(0,200,83,0.1); }
+.diff-removed { background: rgba(255,71,87,0.1); }
+
+.diff-char-detail {
+  margin-top: 4px;
+  padding: 4px 6px;
+  background: var(--bg-input);
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.75rem;
+}
+
+.dc-same { color: var(--text-muted); }
+.dc-rem { background: rgba(255,71,87,0.3); text-decoration: line-through; }
+.dc-add { background: rgba(0,200,83,0.3); }
+
+@media (max-width: 768px) {
+  .compare-dual { flex-direction: column; }
+  .compare-vs { transform: rotate(90deg); }
+}
+
+/* ===== Compare PDF Tool ===== */
+.compare-dual { display: flex; gap: 16px; align-items: center; margin-bottom: 20px; }
+.compare-side { flex: 1; }
+.compare-side .upload-zone { padding: 40px 20px; min-height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.compare-vs { font-size: 1.5rem; font-weight: 900; color: var(--accent); flex-shrink: 0; }
+.diff-list { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.diff-line { display: flex; border-bottom: 1px solid var(--border); font-size: 0.8rem; }
+.diff-line:last-child { border-bottom: none; }
+.diff-num { width: 40px; padding: 6px 8px; text-align: right; color: var(--text-muted); font-size: 0.7rem; flex-shrink: 0; background: var(--bg-input); border-right: 1px solid var(--border); }
+.diff-content { flex: 1; padding: 6px 10px; overflow-x: auto; }
+.diff-a, .diff-b { white-space: pre-wrap; word-break: break-all; }
+.diff-a { color: var(--danger); }
+.diff-b { color: var(--success); }
+.diff-match .diff-a, .diff-match .diff-b { color: var(--text-primary); }
+.diff-match { background: rgba(0,200,83,0.05); }
+.diff-changed { background: rgba(255,165,0,0.08); }
+.diff-added { background: rgba(0,200,83,0.1); }
+.diff-removed { background: rgba(255,71,87,0.1); }
+.diff-char-detail { margin-top: 4px; padding: 4px 6px; background: var(--bg-input); border-radius: 4px; font-family: monospace; font-size: 0.75rem; }
+.dc-same { color: var(--text-muted); }
+.dc-rem { background: rgba(255,71,87,0.3); text-decoration: line-through; }
+.dc-add { background: rgba(0,200,83,0.3); }
+@media (max-width: 768px) { .compare-dual { flex-direction: column; } .compare-vs { transform: rotate(90deg); } }
