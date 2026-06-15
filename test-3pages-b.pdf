@@ -1,0 +1,96 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+2 0 obj
+<< /Length 173 >>
+stream
+0.85 0.35 0.25 rg
+0 0 595 842 re f
+1 1 1 rg
+177 341 240 160 re f
+0.85 0.35 0.25 rg
+BT
+/F1 50 Tf
+277.5 436.0 Td
+(A) Tj
+ET
+BT
+/F1 16 Tf
+242.5 371.0 Td
+(File B - Trang 1) Tj
+ET
+endstream
+endobj
+3 0 obj
+<< /Type /Page /Parent 8 0 R /MediaBox [0 0 595 842] /Contents 2 0 R /Resources << /Font << /F1 1 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 173 >>
+stream
+0.25 0.75 0.35 rg
+0 0 595 842 re f
+1 1 1 rg
+177 341 240 160 re f
+0.25 0.75 0.35 rg
+BT
+/F1 50 Tf
+277.5 436.0 Td
+(B) Tj
+ET
+BT
+/F1 16 Tf
+242.5 371.0 Td
+(File B - Trang 2) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 8 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 1 0 R >> >> >>
+endobj
+6 0 obj
+<< /Length 173 >>
+stream
+0.65 0.25 0.85 rg
+0 0 595 842 re f
+1 1 1 rg
+177 341 240 160 re f
+0.65 0.25 0.85 rg
+BT
+/F1 50 Tf
+277.5 436.0 Td
+(C) Tj
+ET
+BT
+/F1 16 Tf
+242.5 371.0 Td
+(File B - Trang 3) Tj
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 8 0 R /MediaBox [0 0 595 842] /Contents 6 0 R /Resources << /Font << /F1 1 0 R >> >> >>
+endobj
+8 0 obj
+<< /Type /Pages /Kids [3 0 R 5 0 R 7 0 R] /Count 3 >>
+endobj
+9 0 obj
+<< /Type /Catalog /Pages 8 0 R >>
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000009 00000 n 
+0000000084 00000 n 
+0000000308 00000 n 
+0000000434 00000 n 
+0000000658 00000 n 
+0000000784 00000 n 
+0000001008 00000 n 
+0000001134 00000 n 
+0000001203 00000 n 
+trailer
+<< /Size 10 /Root 9 0 R >>
+startxref
+1252
+%%EOF

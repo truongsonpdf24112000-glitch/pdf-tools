@@ -1,0 +1,115 @@
+/* ===== CSS Variables & Theme ===== */
+:root {
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.2);
+  --shadow: 0 4px 24px rgba(0,0,0,0.25);
+  --shadow-lg: 0 8px 40px rgba(0,0,0,0.35);
+  --transition: 0.2s ease;
+  --transition-slow: 0.35s ease;
+}
+
+[data-theme="dark"] {
+  --bg-primary: #0b0b1a;
+  --bg-secondary: #13132b;
+  --bg-sidebar: #0f0f24;
+  --bg-card: #1a1a38;
+  --bg-card-hover: #222250;
+  --bg-input: #1e1e3a;
+  --bg-upload: #141430;
+  --text-primary: #e8e8f4;
+  --text-secondary: #9999bb;
+  --text-muted: #666688;
+  --accent: #6c5ce7;
+  --accent-hover: #8b7cf0;
+  --accent-soft: rgba(108, 92, 231, 0.15);
+  --accent-glow: rgba(108, 92, 231, 0.4);
+  --border: #2a2a50;
+  --border-light: #222245;
+  --success: #00c853;
+  --danger: #ff4757;
+  --warning: #ffa502;
+  --badge-bg: #2a2a50;
+  --badge-text: #8888aa;
+  --scrollbar-thumb: #3a3a60;
+  --scrollbar-track: #1a1a30;
+}
+
+[data-theme="light"] {
+  --bg-primary: #f5f5fa;
+  --bg-secondary: #ffffff;
+  --bg-sidebar: #f0f0f8;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f0f0ff;
+  --bg-input: #ffffff;
+  --bg-upload: #fafaff;
+  --text-primary: #1a1a2e;
+  --text-secondary: #555577;
+  --text-muted: #8888aa;
+  --accent: #6c5ce7;
+  --accent-hover: #5a4bd1;
+  --accent-soft: rgba(108, 92, 231, 0.08);
+  --accent-glow: rgba(108, 92, 231, 0.2);
+  --border: #e0e0f0;
+  --border-light: #eaeaef;
+  --success: #00a844;
+  --danger: #e63946;
+  --warning: #e69500;
+  --badge-bg: #e8e8f0;
+  --badge-text: #777799;
+  --scrollbar-thumb: #ccccdd;
+  --scrollbar-track: #f0f0f5;
+}
+
+/* ===== Reset & Base ===== */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-hover); }
+
+button {
+  cursor: pointer;
+  border: none;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+input, select, textarea {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* Selection */
+::selection {
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}

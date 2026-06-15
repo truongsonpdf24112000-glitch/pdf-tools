@@ -1,0 +1,4 @@
+# Dependencies for PDF Compress Backend
+flask>=3.0
+flask-cors>=4.0
+pikepdf>=9.0
