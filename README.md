@@ -1,6 +1,6 @@
-# PDF Tools
+# Chỉnh Sửa PDF
 
-Bộ công cụ PDF miễn phí, xử lý trực tiếp trên trình duyệt. Không cần cài đặt, không cần upload lên server.
+Bộ công cụ chỉnh sửa PDF miễn phí, xử lý trực tiếp trên trình duyệt. Không cần cài đặt, không cần upload lên server.
 
 🔗 **Dùng ngay:** [https://truongsonpdf24112000-glitch.github.io/pdf-tools](https://truongsonpdf24112000-glitch.github.io/pdf-tools)
 

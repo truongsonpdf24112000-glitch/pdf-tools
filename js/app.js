@@ -41,7 +41,7 @@ function renderSidebar(activeId = 'reorder') {
 
   sidebar.innerHTML = `
     <div class="sidebar-header">
-      <h1>PDF Tools</h1>
+      <h1>Chỉnh Sửa PDF</h1>
       <p class="subtitle">Công cụ văn phòng miễn phí</p>
     </div>
     <nav class="tool-nav">
