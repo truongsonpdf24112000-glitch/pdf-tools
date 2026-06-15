@@ -80,9 +80,10 @@ function renderSidebar(activeId) {
     special: { label: '🔧 Công cụ chuyên dụng', tools: [] },
   };
   TOOLS.forEach(t => { if (groups[t.group]) groups[t.group].tools.push(t); });
-  sidebar.innerHTML = `<div class="sidebar-header"><h1>Chỉnh Sửa PDF</h1><p class="subtitle">Công cụ văn phòng miễn phí</p></div><nav class="tool-nav">${Object.entries(groups).map(([,g]) => `<div class="tool-group"><div class="tool-group-label">${g.label}</div>${g.tools.map(t => `<a href="#${t.id}" class="tool-item ${t.id===activeId?'active':''} ${t.status}" data-tool="${t.id}"><span class="tool-icon">${t.icon}</span><span class="tool-name">${t.name}</span></a>`).join('')}</div>`).join('')}</nav><div class="sidebar-footer"><span style="font-size:0.7rem;color:var(--text-muted);">v4.0.0 · 24 tools</span><button class="theme-toggle" id="theme-toggle" title="Đổi giao diện">🌙</button></div>`;
+  sidebar.innerHTML = `<div class="sidebar-header" id="sidebar-home-btn" style="cursor:pointer;"><h1>Chỉnh Sửa PDF</h1><p class="subtitle">Công cụ văn phòng miễn phí</p></div><nav class="tool-nav">${Object.entries(groups).map(([,g]) => `<div class="tool-group"><div class="tool-group-label">${g.label}</div>${g.tools.map(t => `<a href="#${t.id}" class="tool-item ${t.id===activeId?'active':''} ${t.status}" data-tool="${t.id}"><span class="tool-icon">${t.icon}</span><span class="tool-name">${t.name}</span></a>`).join('')}</div>`).join('')}</nav><div class="sidebar-footer"><span style="font-size:0.7rem;color:var(--text-muted);">v4.1.0 · 24 tools</span><button class="theme-toggle" id="theme-toggle" title="Đổi giao diện">🌙</button></div>`;
   document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
   updateThemeIcon();
+  document.getElementById('sidebar-home-btn')?.addEventListener('click', () => showHome());
   sidebar.querySelectorAll('.tool-item:not(.coming-soon)').forEach(item => {
     item.addEventListener('click', e => { e.preventDefault(); activateTool(item.dataset.tool); });
   });
@@ -122,8 +123,59 @@ function setupMobile() {
 document.addEventListener('DOMContentLoaded', () => {
   document.documentElement.setAttribute('data-theme', localStorage.getItem('pdf-tools-theme') || 'dark');
   const h = window.location.hash.replace('#', '');
-  renderSidebar(h || 'reorder');
+  renderSidebar(h || 'home');
   setupMobile();
-  activateTool(toolMap[h] ? h : 'reorder');
-  window.addEventListener('hashchange', () => { const nh = window.location.hash.replace('#',''); if (toolMap[nh]) activateTool(nh); });
+  if (toolMap[h]) activateTool(h); else showHome();
+  window.addEventListener('hashchange', () => { const nh = window.location.hash.replace('#',''); if (toolMap[nh]) activateTool(nh); else showHome(); });
 });
+
+// Show home/landing page when no tool selected
+function showHome() {
+  const container = document.getElementById('tool-container');
+  window.location.hash = 'home';
+
+  const groups = [
+    { label: '📑 Chỉnh sửa trang', tools: TOOLS.filter(t => t.group === 'edit') },
+    { label: '🔄 Chuyển đổi định dạng', tools: TOOLS.filter(t => t.group === 'convert') },
+    { label: '⚙️ Nâng cao', tools: TOOLS.filter(t => t.group === 'advanced') },
+    { label: '🔧 Chuyên dụng', tools: TOOLS.filter(t => t.group === 'special') },
+  ];
+
+  container.innerHTML = `
+    <div class="home-hero">
+      <h1 class="hero-title">Chỉnh Sửa PDF</h1>
+      <p class="hero-sub">24 công cụ miễn phí — không cần cài đặt, không cần upload</p>
+      <p class="hero-desc">Xử lý <strong>100% trên trình duyệt</strong>. File của bạn <strong>không bao giờ rời khỏi máy</strong>.</p>
+      <div class="hero-stats">
+        <div class="hero-stat"><strong>24</strong><span>công cụ</span></div>
+        <div class="hero-stat"><strong>0₫</strong><span>miễn phí</span></div>
+        <div class="hero-stat"><strong>100%</strong><span>bảo mật</span></div>
+      </div>
+    </div>
+
+    <div class="home-groups">
+      ${groups.map(g => `
+        <div class="home-group">
+          <h2 class="home-group-title">${g.label}</h2>
+          <div class="home-tool-grid">
+            ${g.tools.map(t => `
+              <a href="#${t.id}" class="home-tool-card" data-tool="${t.id}">
+                <span class="home-tool-icon">${t.icon}</span>
+                <span class="home-tool-name">${t.name}</span>
+              </a>
+            `).join('')}
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  // Click handlers for home tool cards
+  container.querySelectorAll('.home-tool-card').forEach(card => {
+    card.addEventListener('click', e => {
+      e.preventDefault();
+      const toolId = card.dataset.tool;
+      activateTool(toolId);
+    });
+  });
+}

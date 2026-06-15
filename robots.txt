@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://truongsonpdf24112000-glitch.github.io/pdf-tools/sitemap.xml
