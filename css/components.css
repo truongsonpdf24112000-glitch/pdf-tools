@@ -1168,3 +1168,58 @@
   color: var(--text-muted);
   margin-top: 8px;
 }
+
+/* ===== Redact Tool ===== */
+.redact-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 12px;
+  margin: 12px 0;
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.redact-nav span {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+#redact-canvas-container {
+  box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+}
+
+/* ===== Range Input ===== */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+
+/* ===== Checkbox ===== */
+input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+/* ===== Small Button ===== */
+.btn-sm {
+  padding: 6px 14px;
+  font-size: 0.8rem;
+}
