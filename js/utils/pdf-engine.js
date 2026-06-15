@@ -104,6 +104,20 @@ export class PDFEngine {
   }
 
   /**
+   * Download a data URL as a file (for images)
+   * @param {string} dataUrl - data:image/...;base64,...
+   * @param {string} fileName
+   */
+  static downloadDataUrl(dataUrl, fileName) {
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  /**
    * Merge multiple PDFs into one
    * @param {Array<{pdfDoc: PDFDocument, fileName: string}>} docs - ordered list
    * @returns {Promise<Uint8Array>}

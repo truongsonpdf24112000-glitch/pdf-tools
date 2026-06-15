@@ -952,4 +952,219 @@
   .btn {
     width: 100%;
   }
+
+  .convert-options {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ===== Tool Groups (Sidebar) ===== */
+.tool-group {
+  margin-bottom: 8px;
+}
+
+.tool-group-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  padding: 8px 16px 4px;
+  font-weight: 700;
+  opacity: 0.6;
+}
+
+/* ===== Convert Card ===== */
+.convert-card {
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 40px 32px;
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+}
+
+/* ===== Convert Options (PDF→Office format selector) ===== */
+.convert-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.convert-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px 12px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition);
+  text-align: center;
+}
+
+.convert-option:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.convert-option.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 20px var(--accent-glow);
+}
+
+.convert-option .c-icon {
+  font-size: 2rem;
+}
+
+.convert-option .c-label {
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.convert-option .c-desc {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+/* ===== Mode Tabs (HTML→PDF) ===== */
+.mode-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-input);
+  border-radius: var(--radius);
+  padding: 4px;
+}
+
+.mode-tab {
+  flex: 1;
+  padding: 10px 12px;
+  border: none;
+  border-radius: calc(var(--radius) - 4px);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.8rem;
+  transition: all var(--transition);
+}
+
+.mode-tab:hover {
+  color: var(--text-primary);
+}
+
+.mode-tab.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ===== Form Input & Select ===== */
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.form-input,
+.form-select {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-family: inherit;
+  transition: border-color var(--transition);
+}
+
+.form-input:focus,
+.form-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.form-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%239898b0' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+  cursor: pointer;
+}
+
+/* ===== Quality Buttons (Compress) ===== */
+.quality-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.quality-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 10px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition);
+  text-align: center;
+}
+
+.quality-btn:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.quality-btn.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.quality-btn .q-icon {
+  font-size: 1.5rem;
+}
+
+.quality-btn .q-label {
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+
+.quality-btn .q-desc {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+
+/* ===== Clickable Thumbnail ===== */
+.thumbnail-card.clickable {
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.thumbnail-card.clickable:hover {
+  transform: scale(1.03);
+  border-color: var(--accent);
+  box-shadow: 0 0 16px var(--accent-glow);
+}
+
+/* ===== File Info ===== */
+.file-info {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 8px;
 }
