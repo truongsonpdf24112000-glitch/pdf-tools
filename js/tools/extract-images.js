@@ -1,6 +1,7 @@
 // js/tools/extract-images.js — Tool: Trích xuất ảnh từ PDF
 import { PDFEngine } from '../utils/pdf-engine.js';
 import { showToast, showLoading, hideLoading, formatFileSize } from '../utils/ui-helpers.js';
+import { getBackendUrl } from '../utils/config.js';
 
 class ExtractImagesTool {
   constructor() {
@@ -10,10 +11,11 @@ class ExtractImagesTool {
       fileSize: 0,
       pageCount: 0
     };
-    this.backendUrl = 'http://localhost:5001';
+    this.backendUrl = null;
   }
 
-  init() {
+  async init() {
+    this.backendUrl = await getBackendUrl();
     this.render();
     this.setupEvents();
   }

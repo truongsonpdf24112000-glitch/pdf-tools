@@ -1,6 +1,7 @@
 // js/tools/compress.js — Tool: Nén PDF
 import { PDFEngine } from '../utils/pdf-engine.js';
 import { showToast, showLoading, hideLoading, formatFileSize } from '../utils/ui-helpers.js';
+import { getBackendUrl } from '../utils/config.js';
 
 class PDFCompressTool {
   constructor() {
@@ -14,12 +15,13 @@ class PDFCompressTool {
 
     this.quality = 'medium'; // high | medium | low
     this.backendAvailable = false;
-    this.backendUrl = 'http://localhost:5001';
+    this.backendUrl = null;
   }
 
-  init() {
+  async init() {
     this.render();
     this.setupEvents();
+    this.backendUrl = await getBackendUrl();
     this.checkBackend();
   }
 

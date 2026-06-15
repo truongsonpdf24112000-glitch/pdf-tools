@@ -421,8 +421,14 @@ def compress():
 # MAIN
 # ============================================================
 if __name__ == '__main__':
+    import os
+    port = int(os.environ.get('PORT', 5001))
+    debug = os.environ.get('FLASK_ENV') != 'production'
+
     print('🚀 PDF Tools Backend')
-    print(f'   Health:      http://localhost:5001/health')
+    print(f'   Port:        {port}')
+    print(f'   Debug:       {debug}')
+    print(f'   Health:      http://0.0.0.0:{port}/health')
     print(f'   Convert:     POST /convert?type=pdf-to-word')
     print(f'   PDF→Images:  POST /pdf-to-images?format=jpg')
     print(f'   Images→PDF:  POST /images-to-pdf')
@@ -432,4 +438,4 @@ if __name__ == '__main__':
     print(f'   Supported conversions:')
     for k, v in FORMAT_MAP.items():
         print(f'     {k:20s} → {v["ext"]} ({v["mime"]})')
-    app.run(host='0.0.0.0', port=5001, debug=False)
+    app.run(host='0.0.0.0', port=port, debug=debug)

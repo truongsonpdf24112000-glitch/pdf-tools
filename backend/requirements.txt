@@ -4,4 +4,5 @@ flask-cors>=4.0
 pikepdf>=9.0
 pdf2image>=1.16
 Pillow>=10.0
+gunicorn>=21.0
 # Optional: weasyprint>=60  # For HTML→PDF (fallback: Chromium headless)

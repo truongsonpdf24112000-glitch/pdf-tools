@@ -1,0 +1,26 @@
+# Render Blueprint — tự động deploy backend lên Render.com
+# Sau khi push code lên GitHub, vào Render Dashboard → New → Web Service
+# Chọn repo pdf-tools → Render tự đọc file này
+
+services:
+  - type: web
+    name: pdf-tools-backend
+    env: python
+    region: singapore  # Gần Việt Nam, latency thấp
+    buildCommand: |
+      apt-get update && apt-get install -y libreoffice-core libreoffice-writer libreoffice-calc libreoffice-impress poppler-utils
+      cd backend
+      python3 -m venv .venv
+      .venv/bin/pip install -r requirements.txt
+    startCommand: cd backend && .venv/bin/gunicorn server:app --bind 0.0.0.0:$PORT --timeout 120 --workers 1
+    plan: free
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: FLASK_ENV
+        value: production
+      - key: MAX_CONTENT_LENGTH
+        value: "52428800"  # 50MB
+
+    # Auto-deploy khi push lên main
+    autoDeploy: true

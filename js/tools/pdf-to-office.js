@@ -1,6 +1,7 @@
 // js/tools/pdf-to-office.js — Tool: PDF → Word / Excel / PowerPoint
 import { PDFEngine } from '../utils/pdf-engine.js';
 import { showToast, showLoading, hideLoading, formatFileSize } from '../utils/ui-helpers.js';
+import { getBackendUrl } from '../utils/config.js';
 
 class PDFToOfficeTool {
   constructor() {
@@ -13,10 +14,11 @@ class PDFToOfficeTool {
       fileSize: 0
     };
     this.targetFormat = 'word';
-    this.backendUrl = 'http://localhost:5001';
+    this.backendUrl = null;
   }
 
-  init() {
+  async init() {
+    this.backendUrl = await getBackendUrl();
     this.render();
     this.setupEvents();
   }
