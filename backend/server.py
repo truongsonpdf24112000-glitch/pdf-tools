@@ -91,6 +91,25 @@ def convert():
 
     file = request.files['file']
     work_dir = Path(tempfile.mkdtemp(dir=UPLOAD_DIR))
+
+    # PDF → Office: LibreOffice doesn't support PDF import.
+    # Use extracted text approach instead.
+    if conv_type.startswith('pdf-to-') and conv_type != 'pdf-to-word':
+        pass  # Only Word is special-cased below
+
+    # For PDF→Word, extract text and create simple DOCX
+    if conv_type == 'pdf-to-word':
+        try:
+            return _pdf_to_docx(file, work_dir)
+        except Exception as e:
+            return jsonify({'error': f'PDF→Word failed: {str(e)}. Try PDF→JPG first, then use OCR.'}), 500
+
+    # For PDF→Excel/PPT: these don't work via LibreOffice directly
+    if conv_type in ('pdf-to-excel', 'pdf-to-ppt'):
+        return jsonify({
+            'error': f'{conv_type} not supported directly. LibreOffice cannot import PDF.',
+            'hint': 'Convert PDF→JPG first, then use OCR to extract data. Or use PDF→Word as intermediate step.'
+        }), 400
     input_path = work_dir / f"input{Path(file.filename).suffix}"
 
     try:
@@ -163,8 +182,78 @@ def _html_to_pdf(html_path, output_path):
             )
             if output_path.exists():
                 return
-
     raise RuntimeError("No HTML→PDF converter available. Install weasyprint or Chromium.")
+
+
+def _pdf_to_docx(file, work_dir):
+    """Extract text from PDF and create a minimal DOCX file"""
+    import pikepdf
+
+    input_bytes = file.read()
+    pdf = pikepdf.Pdf.open(io.BytesIO(input_bytes))
+
+    # Extract text from all pages
+    text_parts = []
+    for page in pdf.pages:
+        try:
+            if '/Contents' in page:
+                content = page.Contents.read_bytes()
+                # Basic text extraction from content stream
+                text = content.decode('latin-1', errors='replace')
+                # Filter out PDF operators, keep text between parentheses and BT/ET
+                import re
+                texts = re.findall(r'\(([^)]*)\)', text)
+                page_text = ' '.join(t for t in texts if len(t) > 1 and not t.startswith('\\'))
+                if page_text.strip():
+                    text_parts.append(page_text.strip())
+        except Exception:
+            pass
+
+    pdf.close()
+
+    combined = '\n\n'.join(text_parts) if text_parts else '(PDF contains no extractable text — may be scanned/image-based)'
+
+    # Create minimal DOCX (ZIP of XML files)
+    docx_buf = io.BytesIO()
+    with zipfile.ZipFile(docx_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        # [Content_Types].xml
+        zf.writestr('[Content_Types].xml', '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>''')
+
+        # _rels/.rels
+        zf.writestr('_rels/.rels', '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>''')
+
+        # word/_rels/document.xml.rels
+        zf.writestr('word/_rels/document.xml.rels', '''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+</Relationships>''')
+
+        # word/document.xml
+        paragraphs = ''.join(
+            f'<w:p><w:r><w:t xml:space="preserve">{_xml_escape(para)}</w:t></w:r></w:p>'
+            for para in combined.split('\n\n') if para.strip()
+        )
+        zf.writestr('word/document.xml', f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>{paragraphs}</w:body>
+</w:document>''')
+
+    docx_buf.seek(0)
+    out_name = Path(file.filename).stem + '.docx'
+    return send_file(docx_buf, mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                     as_attachment=True, download_name=out_name)
+
+
+def _xml_escape(text):
+    return text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
+
 
 # ============================================================
 # IMAGE — PDF ↔ Images
