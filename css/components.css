@@ -1537,3 +1537,115 @@ input[type="checkbox"] {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ===== Mode Toolbar (PDF Edit) ===== */
+.mode-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 6px;
+}
+
+.mode-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: all var(--transition);
+  cursor: pointer;
+  flex: 1;
+  min-width: 70px;
+}
+
+.mode-btn:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.mode-btn.active {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 12px var(--accent-glow);
+}
+
+.mode-btn .mode-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.mode-btn .mode-label {
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .mode-toolbar {
+    gap: 2px;
+    padding: 4px;
+  }
+  .mode-btn {
+    padding: 10px 8px;
+    gap: 2px;
+    font-size: 0.72rem;
+  }
+  .mode-btn .mode-icon {
+    font-size: 1.1rem;
+  }
+}
+
+/* ===== Home Upload Zone ===== */
+.home-upload-zone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-lg);
+  padding: 50px 30px;
+  text-align: center;
+  cursor: pointer;
+  transition: all var(--transition);
+  background: var(--bg-upload);
+  max-width: 650px;
+  margin: 0 auto;
+}
+
+.home-upload-zone:hover {
+  border-color: var(--accent);
+  background: var(--bg-card-hover);
+}
+
+.home-upload-zone.drag-over {
+  border-color: var(--accent);
+  background: var(--bg-card-hover);
+  box-shadow: 0 0 30px var(--accent-glow);
+}
+
+.home-upload-zone .upload-icon {
+  font-size: 3rem;
+  margin-bottom: 12px;
+}
+
+.home-upload-zone h3 {
+  font-size: 1.1rem;
+  margin-bottom: 6px;
+  color: var(--text-primary);
+}
+
+.home-upload-zone .sub {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-bottom: 4px;
+}
+
+.home-upload-zone .file-info {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  margin-top: 8px;
+  opacity: 0.7;
+}

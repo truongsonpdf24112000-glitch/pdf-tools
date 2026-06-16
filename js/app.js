@@ -2,85 +2,71 @@
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
 
-import reorderTool from './tools/reorder.js';
-import mergeTool from './tools/merge.js';
-import splitTool from './tools/split.js';
-import rotateTool from './tools/rotate.js';
-import deleteTool from './tools/delete.js';
-import pageNumTool from './tools/page-num.js';
-import lockTool from './tools/lock.js';
-import compressTool from './tools/compress.js';
-import pdfToJpgTool from './tools/pdf-to-jpg.js';
-import jpgToPdfTool from './tools/jpg-to-pdf.js';
-import pdfToOfficeTool from './tools/pdf-to-office.js';
-import officeToPdfTool from './tools/office-to-pdf.js';
-import htmlToPdfTool from './tools/html-to-pdf.js';
-import extractImagesTool from './tools/extract-images.js';
-import cropPdfTool from './tools/crop-pdf.js';
-import watermarkTool from './tools/watermark.js';
-import headerFooterTool from './tools/header-footer.js';
-import grayscaleTool from './tools/grayscale-pdf.js';
-import flattenPdfTool from './tools/flatten-pdf.js';
-import redactPdfTool from './tools/redact-pdf.js';
-import comparePdfTool from './tools/compare-pdf.js';
-import batesNumberingTool from './tools/bates-numbering.js';
-import scanToPdfTool from './tools/scan-to-pdf.js';
-import repairPdfTool from './tools/repair-pdf.js';
+import editTool from './tools/edit.js';
+import convertTool from './tools/convert.js';
+import advancedTool from './tools/advanced.js';
+import specialTool from './tools/special.js';
 
 const TOOLS = [
-  { id: 'reorder', name: 'Sắp xếp trang PDF', icon: '📑', status: 'active', group: 'edit' },
-  { id: 'merge', name: 'Trộn PDF', icon: '🔀', status: 'active', group: 'edit' },
-  { id: 'split', name: 'Tách trang PDF', icon: '✂️', status: 'active', group: 'edit' },
-  { id: 'rotate', name: 'Xoay trang PDF', icon: '🔄', status: 'active', group: 'edit' },
-  { id: 'delete', name: 'Xóa trang PDF', icon: '🗑️', status: 'active', group: 'edit' },
+  { id: 'edit', name: 'Chỉnh sửa PDF', icon: '📑', status: 'active', group: 'edit',
+    desc: 'Sắp xếp, trộn, tách, xoay, xóa trang' },
 
-  { id: 'pdf-to-office', name: 'PDF → Word/Excel/PPT', icon: '📄➡️📝', status: 'active', group: 'convert' },
-  { id: 'office-to-pdf', name: 'Word/Excel/PPT → PDF', icon: '📝➡️📄', status: 'active', group: 'convert' },
-  { id: 'pdf-to-jpg', name: 'PDF → JPG', icon: '📄➡️🖼️', status: 'active', group: 'convert' },
-  { id: 'jpg-to-pdf', name: 'JPG → PDF', icon: '🖼️➡️📄', status: 'active', group: 'convert' },
-  { id: 'html-to-pdf', name: 'HTML → PDF', icon: '🌐➡️📄', status: 'active', group: 'convert' },
+  { id: 'convert', name: 'Chuyển đổi định dạng', icon: '🔄', status: 'active', group: 'convert',
+    desc: 'PDF↔Office, PDF↔Ảnh, HTML→PDF' },
 
-  { id: 'crop', name: 'Cắt lề PDF', icon: '✂️', status: 'active', group: 'advanced' },
-  { id: 'watermark', name: 'Watermark', icon: '💧', status: 'active', group: 'advanced' },
-  { id: 'header-footer', name: 'Header & Footer', icon: '📋', status: 'active', group: 'advanced' },
-  { id: 'grayscale', name: 'Grayscale', icon: '⬛⬜', status: 'active', group: 'advanced' },
-  { id: 'flatten', name: 'Flatten PDF', icon: '🔨', status: 'active', group: 'advanced' },
-  { id: 'redact', name: 'Redact (che ND)', icon: '⬛', status: 'active', group: 'advanced' },
-  { id: 'compress', name: 'Nén PDF', icon: '📦', status: 'active', group: 'advanced' },
-  { id: 'page-num', name: 'Thêm số trang', icon: '🔢', status: 'active', group: 'advanced' },
-  { id: 'lock', name: 'Khóa / Mở khóa PDF', icon: '🔒', status: 'active', group: 'advanced' },
-  { id: 'extract-img', name: 'Trích xuất ảnh', icon: '🖼️', status: 'active', group: 'advanced' },
+  { id: 'advanced', name: 'Công cụ nâng cao', icon: '⚙️', status: 'active', group: 'advanced',
+    desc: 'Cắt lề, Watermark, Header/Footer, Grayscale, Flatten, Redact, Nén, Số trang, Khóa, Trích xuất ảnh' },
 
-  { id: 'compare', name: 'So sánh PDF', icon: '🔍', status: 'active', group: 'special' },
-  { id: 'bates', name: 'Bates Numbering', icon: '🔢', status: 'active', group: 'special' },
-  { id: 'scan', name: 'Scan to PDF', icon: '📸', status: 'active', group: 'special' },
-  { id: 'repair', name: 'Sửa PDF lỗi', icon: '🔧', status: 'active', group: 'special' },
+  { id: 'special', name: 'Công cụ chuyên dụng', icon: '🔧', status: 'active', group: 'special',
+    desc: 'So sánh PDF, Bates Numbering, Scan to PDF, Sửa PDF lỗi' },
 ];
 
 const toolMap = {
-  reorder: reorderTool, merge: mergeTool, split: splitTool, rotate: rotateTool,
-  delete: deleteTool, 'page-num': pageNumTool, lock: lockTool, compress: compressTool,
-  'pdf-to-jpg': pdfToJpgTool, 'jpg-to-pdf': jpgToPdfTool,
-  'pdf-to-office': pdfToOfficeTool, 'office-to-pdf': officeToPdfTool,
-  'html-to-pdf': htmlToPdfTool, 'extract-img': extractImagesTool,
-  crop: cropPdfTool, watermark: watermarkTool,
-  'header-footer': headerFooterTool, grayscale: grayscaleTool,
-  flatten: flattenPdfTool, redact: redactPdfTool,
-  compare: comparePdfTool, bates: batesNumberingTool,
-  scan: scanToPdfTool, repair: repairPdfTool,
+  edit: editTool,
+  convert: convertTool,
+  advanced: advancedTool,
+  special: specialTool,
+};
+
+const GROUP_LABELS = {
+  edit: '📑 Chỉnh sửa PDF',
+  convert: '🔄 Chuyển đổi định dạng',
+  advanced: '⚙️ Công cụ nâng cao',
+  special: '🔧 Công cụ chuyên dụng',
 };
 
 function renderSidebar(activeId) {
   const sidebar = document.getElementById('sidebar');
   if (!sidebar) return;
-  const groups = {
-    edit: { label: '📑 Chỉnh sửa trang', tools: [] },
-    convert: { label: '🔄 Chuyển đổi định dạng', tools: [] },
-    advanced: { label: '⚙️ Công cụ nâng cao', tools: [] },
-    special: { label: '🔧 Công cụ chuyên dụng', tools: [] },
-  };
-  TOOLS.forEach(t => { if (groups[t.group]) groups[t.group].tools.push(t); });
-  sidebar.innerHTML = `<div class="sidebar-header" id="sidebar-home-btn" style="cursor:pointer;"><h1>Chỉnh Sửa PDF</h1><p class="subtitle">Công cụ văn phòng miễn phí</p></div><nav class="tool-nav">${Object.entries(groups).map(([,g]) => `<div class="tool-group"><div class="tool-group-label">${g.label}</div>${g.tools.map(t => `<a href="#${t.id}" class="tool-item ${t.id===activeId?'active':''} ${t.status}" data-tool="${t.id}"><span class="tool-icon">${t.icon}</span><span class="tool-name">${t.name}</span></a>`).join('')}</div>`).join('')}</nav><div class="sidebar-footer"><span style="font-size:0.7rem;color:var(--text-muted);">v4.1.0 · 24 tools</span><button class="theme-toggle" id="theme-toggle" title="Đổi giao diện">🌙</button></div>`;
+  const groups = {};
+  TOOLS.forEach(t => {
+    if (!groups[t.group]) groups[t.group] = [];
+    groups[t.group].push(t);
+  });
+
+  const nav = Object.entries(groups).map(([key, tools]) => `
+    <div class="tool-group">
+      <div class="tool-group-label">${GROUP_LABELS[key] || key}</div>
+      ${tools.map(t => `
+        <a href="#${t.id}" class="tool-item ${t.id===activeId?'active':''} ${t.status}" data-tool="${t.id}">
+          <span class="tool-icon">${t.icon}</span>
+          <span class="tool-name">${t.name}</span>
+        </a>
+      `).join('')}
+    </div>
+  `).join('');
+
+  sidebar.innerHTML = `
+    <div class="sidebar-header" id="sidebar-home-btn" style="cursor:pointer;">
+      <h1>Chỉnh Sửa PDF</h1>
+      <p class="subtitle">Công cụ văn phòng miễn phí</p>
+    </div>
+    <nav class="tool-nav">${nav}</nav>
+    <div class="sidebar-footer">
+      <span style="font-size:0.7rem;color:var(--text-muted);">v5.0.0 · 4 tools</span>
+      <button class="theme-toggle" id="theme-toggle" title="Đổi giao diện">🌙</button>
+    </div>`;
+
   document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
   updateThemeIcon();
   document.getElementById('sidebar-home-btn')?.addEventListener('click', () => showHome());
@@ -134,48 +120,44 @@ function showHome() {
   const container = document.getElementById('tool-container');
   window.location.hash = 'home';
 
-  const groups = [
-    { label: '📑 Chỉnh sửa trang', tools: TOOLS.filter(t => t.group === 'edit') },
-    { label: '🔄 Chuyển đổi định dạng', tools: TOOLS.filter(t => t.group === 'convert') },
-    { label: '⚙️ Nâng cao', tools: TOOLS.filter(t => t.group === 'advanced') },
-    { label: '🔧 Chuyên dụng', tools: TOOLS.filter(t => t.group === 'special') },
-  ];
-
   container.innerHTML = `
     <div class="home-hero">
       <h1 class="hero-title">Chỉnh Sửa PDF</h1>
-      <p class="hero-sub">24 công cụ miễn phí — không cần cài đặt, không cần upload</p>
+      <p class="hero-sub">4 nhóm công cụ — miễn phí, không cần cài đặt, không cần upload</p>
       <p class="hero-desc">Xử lý <strong>100% trên trình duyệt</strong>. File của bạn <strong>không bao giờ rời khỏi máy</strong>.</p>
       <div class="hero-stats">
-        <div class="hero-stat"><strong>24</strong><span>công cụ</span></div>
+        <div class="hero-stat"><strong>4</strong><span>nhóm công cụ</span></div>
         <div class="hero-stat"><strong>0₫</strong><span>miễn phí</span></div>
         <div class="hero-stat"><strong>100%</strong><span>bảo mật</span></div>
       </div>
     </div>
 
-    <div class="home-groups">
-      ${groups.map(g => `
-        <div class="home-group">
-          <h2 class="home-group-title">${g.label}</h2>
-          <div class="home-tool-grid">
-            ${g.tools.map(t => `
-              <a href="#${t.id}" class="home-tool-card" data-tool="${t.id}">
-                <span class="home-tool-icon">${t.icon}</span>
-                <span class="home-tool-name">${t.name}</span>
-              </a>
-            `).join('')}
-          </div>
-        </div>
-      `).join('')}
+    <div class="home-upload-zone" id="home-upload-zone">
+      <div class="upload-icon">📄</div>
+      <h3>Kéo thả file PDF vào đây để bắt đầu</h3>
+      <p class="sub">hoặc click để chọn file</p>
+      <p class="file-info">Hỗ trợ PDF, Word, Excel, PPT, JPG, PNG, HTML · Tối đa 100MB</p>
     </div>
+    <input type="file" id="home-file-input" accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,.jpg,.jpeg,.png,.webp,.bmp,.html,.htm" hidden>
   `;
 
-  // Click handlers for home tool cards
-  container.querySelectorAll('.home-tool-card').forEach(card => {
-    card.addEventListener('click', e => {
-      e.preventDefault();
-      const toolId = card.dataset.tool;
-      activateTool(toolId);
-    });
+  // Upload zone events
+  const zone = document.getElementById('home-upload-zone');
+  const input = document.getElementById('home-file-input');
+
+  const handleFile = (file) => {
+    if (!file) return;
+    window.__pendingPdfFile = file;
+    activateTool('edit');
+  };
+
+  zone.addEventListener('click', () => input.click());
+  input.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
   });
 }

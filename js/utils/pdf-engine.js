@@ -164,8 +164,8 @@ export class PDFEngine {
     for (const [pageIndex, angle] of rotations.entries()) {
       if (pageIndex < pages.length) {
         const page = pages[pageIndex];
-        const currentRotation = page.getRotation().angle;
-        page.setRotation(PDFLib.degrees(currentRotation + angle));
+        // Set rotation tuyệt đối theo góc người dùng chọn, không cộng dồn với rotation gốc
+        page.setRotation(PDFLib.degrees(angle));
       }
     }
 

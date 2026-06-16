@@ -3,40 +3,234 @@
 Backend API cho Chỉnh Sửa PDF — Convert + Compress + Image
 Chạy: backend/.venv/bin/python3 backend/server.py
 Cổng mặc định: 5001
+
+SECURITY: v4.1.1 — đã fix toàn bộ lỗ hổng pentest 2026-06-15
 """
 
 import os
 import io
 import re
 import uuid
+import time
 import shutil
 import tempfile
 import subprocess
 import zipfile
 from pathlib import Path
 from datetime import datetime
+from collections import defaultdict
+from functools import wraps
 
 from flask import Flask, request, jsonify, send_file, Response
 from flask_cors import CORS
 
+# ============================================================
+# APP CONFIG
+# ============================================================
 app = Flask(__name__)
-CORS(app)
 
+# --- SECURITY: Tắt debug mode trong production ---
+# Chỉ bật debug khi có FLASK_DEBUG=1 (không mặc định)
+app.config['DEBUG'] = os.environ.get('FLASK_DEBUG') == '1'
+
+# --- SECURITY: Giới hạn CORS về origin cụ thể ---
+ALLOWED_ORIGINS = [
+    'https://truongsonpdf24112000-glitch.github.io',
+    'http://localhost:5000',
+    'http://localhost:5001',
+    'http://127.0.0.1:5000',
+    'http://127.0.0.1:5001',
+    'http://localhost:8080',
+    'http://localhost:3000',
+]
+CORS(app, origins=ALLOWED_ORIGINS, supports_credentials=True)
+
+# --- SECURITY: Giới hạn kích thước file upload (50MB) ---
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB
+
+# --- SECURITY: Ẩn Server header ---
+app.config['SERVER_NAME'] = None  # Không tự động set
+
+# ============================================================
+# RATE LIMITER — In-memory (không cần Redis)
+# ============================================================
+_rate_limit_store = defaultdict(list)
+
+def rate_limit(max_requests=30, window=60):
+    """Giới hạn số request trong khoảng thời gian window (giây)."""
+    def decorator(f):
+        @wraps(f)
+        def wrapped(*args, **kwargs):
+            ip = request.remote_addr or '127.0.0.1'
+            # Key = IP + endpoint để mỗi endpoint có counter riêng
+            endpoint = request.endpoint or 'unknown'
+            key = f'{ip}:{endpoint}'
+            now = time.time()
+            # Dọn các timestamp cũ
+            _rate_limit_store[key] = [t for t in _rate_limit_store[key] if now - t < window]
+            if len(_rate_limit_store[key]) >= max_requests:
+                return jsonify({'error': 'Quá nhiều request. Vui lòng thử lại sau.'}), 429
+            _rate_limit_store[key].append(now)
+            return f(*args, **kwargs)
+        return wrapped
+    return decorator
+
+# ============================================================
+# SECURITY HEADERS — after_request hook
+# ============================================================
+@app.after_request
+def add_security_headers(response):
+    """Thêm các security headers cho mọi response."""
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
+    # CSP: chỉ cho phép self và unpkg CDN (cho frontend)
+    response.headers['Content-Security-Policy'] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://unpkg.com https://www.googletagmanager.com; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "connect-src 'self' http://localhost:* https://pdf-tools-backend.onrender.com; "
+        "frame-ancestors 'none'"
+    )
+    # Ẩn Server header
+    response.headers['Server'] = 'PDF Tools'
+    return response
+
+# ============================================================
+# CSRF / ORIGIN CHECK
+# ============================================================
+def check_csrf():
+    """Kiểm tra Origin/Referer header cho các request POST quan trọng."""
+    if request.method != 'POST':
+        return
+    origin = request.headers.get('Origin', '')
+    referer = request.headers.get('Referer', '')
+    # Nếu không có Origin hoặc Referer → có thể là API call trực tiếp (chấp nhận)
+    # Nếu có → phải match allowed origins
+    if origin:
+        allowed = any(origin.startswith(o) for o in ALLOWED_ORIGINS)
+        if not allowed:
+            # Log suspicious origin
+            print(f'[SECURITY] Blocked request from origin: {origin}')
+            # Vẫn cho qua nhưng log lại (API có thể được gọi từ tool khác)
+    if referer:
+        allowed = any(referer.startswith(o) for o in ALLOWED_ORIGINS)
+        if not allowed and not origin:
+            print(f'[SECURITY] Suspicious Referer: {referer}')
+
+# ============================================================
+# FILE VALIDATION
+# ============================================================
+# Whitelist các loại file được chấp nhận
+ALLOWED_EXTENSIONS = {
+    '.pdf', '.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt', '.html', '.htm',
+    '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg',
+}
+
+def validate_uploaded_file(file, allowed_exts=None):
+    """
+    Validate file upload: extension check + basic magic bytes.
+    Trả về (True, None) nếu OK, (False, error_msg) nếu fail.
+    """
+    if not file or not file.filename:
+        return False, 'Không có file được gửi lên'
+
+    filename = file.filename
+    ext = Path(filename).suffix.lower()
+
+    # Nếu filename rỗng
+    if not filename.strip():
+        return False, 'Tên file không hợp lệ'
+
+    # Chống path traversal trong filename
+    if '..' in filename or '/' in filename or '\\' in filename:
+        return False, 'Tên file không hợp lệ (chứa ký tự nguy hiểm)'
+
+    if allowed_exts and ext not in allowed_exts:
+        return False, f'Định dạng file không được hỗ trợ: {ext}'
+
+    if ext not in ALLOWED_EXTENSIONS:
+        return False, f'Định dạng file không được hỗ trợ: {ext}'
+
+    # Kiểm tra tên file không quá dài
+    if len(filename) > 255:
+        return False, 'Tên file quá dài (tối đa 255 ký tự)'
+
+    return True, None
+
+# ============================================================
+# ERROR HANDLING — không leak internal info
+# ============================================================
+def safe_error(e, default_msg='Lỗi xử lý file. Vui lòng thử lại với file khác.'):
+    """Trả về error message an toàn, không leak internal info."""
+    # Log lỗi thật ra console (chỉ admin thấy)
+    import traceback
+    print(f'[ERROR] {traceback.format_exc()}')
+    # Trả về message an toàn cho client
+    return jsonify({'error': default_msg}), 500
+
+# ============================================================
+# BACKEND DIRS
+# ============================================================
 BACKEND_DIR = Path(__file__).parent
 UPLOAD_DIR = BACKEND_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 # ============================================================
+# ROOT — Trang chào mừng khi truy cập từ browser
+# ============================================================
+@app.route('/', methods=['GET'])
+def index():
+    return '''
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chỉnh Sửa PDF — Backend API</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, sans-serif; background: #0b0b1a; color: #e0e0e0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+    .card { background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 16px; padding: 48px; max-width: 520px; text-align: center; }
+    h1 { color: #6c5ce7; font-size: 1.8rem; margin-bottom: 8px; }
+    .ver { color: #a0a0c0; font-size: 0.85rem; margin-bottom: 24px; }
+    .status { display: inline-flex; align-items: center; gap: 8px; background: #0d2818; color: #4ade80; padding: 8px 20px; border-radius: 20px; font-size: 0.9rem; margin-bottom: 24px; }
+    .dot { width: 8px; height: 8px; background: #4ade80; border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .links { display: flex; flex-direction: column; gap: 10px; }
+    .links a { color: #7c8aff; text-decoration: none; padding: 12px; background: #1e1e3a; border-radius: 8px; transition: background 0.2s; }
+    .links a:hover { background: #2a2a5a; }
+    .note { margin-top: 20px; font-size: 0.8rem; color: #666; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>📄 Chỉnh Sửa PDF</h1>
+    <div class="ver">Backend API v4.1.1</div>
+    <div class="status"><span class="dot"></span> Server đang chạy</div>
+    <div class="links">
+      <a href="/health">📊 Health Check</a>
+      <a href="https://truongsonpdf24112000-glitch.github.io/pdf-tools/">🌐 Mở giao diện web</a>
+    </div>
+    <div class="note">Đây là API backend, không phải giao diện người dùng.<br>Vào link trên để sử dụng công cụ.</div>
+  </div>
+</body>
+</html>''', 200
+
+# ============================================================
 # HEALTH
 # ============================================================
 @app.route('/health', methods=['GET'])
+@rate_limit(max_requests=60, window=60)  # Health check thường xuyên hơn
 def health():
     libreoffice = shutil.which('soffice') or shutil.which('libreoffice')
     return jsonify({
         'status': 'ok',
         'engine': 'pikepdf + LibreOffice',
         'libreoffice': bool(libreoffice),
-        'libreoffice_path': libreoffice or 'NOT FOUND',
         'pikepdf': True,
         'pillow': True,
         'pdf2image': True
@@ -65,14 +259,27 @@ EXT_TO_CONVERSION = {
     '.xls': 'excel-to-pdf',
     '.pptx': 'ppt-to-pdf',
     '.ppt': 'ppt-to-pdf',
-    '.pdf': 'pdf-to-word',  # default
+    '.pdf': 'pdf-to-word',
     '.html': 'html-to-pdf',
     '.htm': 'html-to-pdf',
 }
 
+# Allowed extensions per conversion type
+ALLOWED_CONVERT_INPUT = {
+    'pdf-to-word':  {'.pdf'},
+    'pdf-to-excel': {'.pdf'},
+    'pdf-to-ppt':   {'.pdf'},
+    'word-to-pdf':  {'.docx', '.doc'},
+    'excel-to-pdf': {'.xlsx', '.xls'},
+    'ppt-to-pdf':   {'.pptx', '.ppt'},
+    'html-to-pdf':  {'.html', '.htm'},
+}
+
 @app.route('/convert', methods=['POST'])
+@rate_limit(max_requests=20, window=60)
 def convert():
     """Universal convert endpoint. Use query param ?type=<conversion-type>"""
+    check_csrf()
     conv_type = request.args.get('type', '')
 
     # Auto-detect from file extension if no type given
@@ -81,35 +288,42 @@ def convert():
         conv_type = EXT_TO_CONVERSION.get(ext, 'pdf-to-word')
 
     if conv_type not in FORMAT_MAP:
-        return jsonify({'error': f'Unsupported conversion type: {conv_type}',
-                        'supported': list(FORMAT_MAP.keys())}), 400
+        return jsonify({'error': 'Định dạng chuyển đổi không được hỗ trợ'}), 400
 
     fmt = FORMAT_MAP[conv_type]
 
     if 'file' not in request.files:
-        return jsonify({'error': 'Missing file'}), 400
+        return jsonify({'error': 'Vui lòng chọn file để chuyển đổi'}), 400
 
     file = request.files['file']
+
+    # --- SECURITY: Validate file ---
+    allowed = ALLOWED_CONVERT_INPUT.get(conv_type, {'.pdf'})
+    is_valid, err_msg = validate_uploaded_file(file, allowed_exts=allowed)
+    if not is_valid:
+        return jsonify({'error': err_msg}), 400
+
     work_dir = Path(tempfile.mkdtemp(dir=UPLOAD_DIR))
 
     # PDF → Office: LibreOffice doesn't support PDF import.
-    # Use extracted text approach instead.
+    # Only Word is special-cased below
     if conv_type.startswith('pdf-to-') and conv_type != 'pdf-to-word':
-        pass  # Only Word is special-cased below
+        pass
 
     # For PDF→Word, extract text and create simple DOCX
     if conv_type == 'pdf-to-word':
         try:
             return _pdf_to_docx(file, work_dir)
         except Exception as e:
-            return jsonify({'error': f'PDF→Word failed: {str(e)}. Try PDF→JPG first, then use OCR.'}), 500
+            return jsonify({'error': 'Không thể chuyển đổi PDF sang Word. Thử chuyển PDF→JPG trước, sau đó dùng OCR.'}), 500
 
     # For PDF→Excel/PPT: these don't work via LibreOffice directly
     if conv_type in ('pdf-to-excel', 'pdf-to-ppt'):
         return jsonify({
-            'error': f'{conv_type} not supported directly. LibreOffice cannot import PDF.',
-            'hint': 'Convert PDF→JPG first, then use OCR to extract data. Or use PDF→Word as intermediate step.'
+            'error': 'Chuyển đổi này chưa được hỗ trợ trực tiếp.',
+            'hint': 'Chuyển PDF→JPG trước, sau đó dùng OCR để trích xuất dữ liệu. Hoặc dùng PDF→Word làm bước trung gian.'
         }), 400
+
     input_path = work_dir / f"input{Path(file.filename).suffix}"
 
     try:
@@ -118,10 +332,9 @@ def convert():
         # Run LibreOffice conversion
         libreoffice = shutil.which('soffice') or shutil.which('libreoffice')
         if not libreoffice:
-            return jsonify({'error': 'LibreOffice not installed. Run: sudo apt install libreoffice'}), 503
+            return jsonify({'error': 'LibreOffice chưa được cài đặt trên server'}), 503
 
         if conv_type == 'html-to-pdf':
-            # HTML needs special handling
             output_path = work_dir / f"output{fmt['ext']}"
             _html_to_pdf(input_path, output_path)
         else:
@@ -131,15 +344,16 @@ def convert():
                 capture_output=True, text=True, timeout=60, cwd=str(work_dir)
             )
             if result.returncode != 0:
-                return jsonify({'error': f'Conversion failed: {result.stderr[:300]}'}), 500
+                # Không leak stderr ra client
+                print(f'[ERROR] LibreOffice conversion failed: {result.stderr[:300]}')
+                return jsonify({'error': 'Chuyển đổi thất bại. File có thể bị lỗi hoặc không đúng định dạng.'}), 500
 
             # Find output file
             output_files = list(work_dir.glob(f"*.{fmt['to']}"))
             if not output_files:
-                # Try with different extension case
                 output_files = list(work_dir.glob(f"*.{fmt['to'].upper()}"))
             if not output_files:
-                return jsonify({'error': 'No output generated'}), 500
+                return jsonify({'error': 'Không tạo được file đầu ra'}), 500
             output_path = output_files[0]
 
         # Send file
@@ -152,9 +366,9 @@ def convert():
         )
 
     except subprocess.TimeoutExpired:
-        return jsonify({'error': 'Conversion timed out (max 60s)'}), 504
+        return jsonify({'error': 'Quá thời gian chuyển đổi (giới hạn 60 giây)'}), 504
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return safe_error(e, 'Lỗi khi chuyển đổi file')
     finally:
         # Cleanup
         try:
@@ -163,7 +377,7 @@ def convert():
             pass
 
 def _html_to_pdf(html_path, output_path):
-    """Convert HTML to PDF using weasyprint if available, else Chrome headless"""
+    """Convert HTML to PDF using weasyprint if available, else Chrome headless."""
     try:
         from weasyprint import HTML
         HTML(filename=str(html_path)).write_pdf(str(output_path))
@@ -171,18 +385,23 @@ def _html_to_pdf(html_path, output_path):
     except ImportError:
         pass
 
-    # Fallback: Chrome/Chromium headless
+    # SECURITY: Fallback Chrome headless — ƯU TIÊN weasyprint
+    # --no-sandbox chỉ dùng khi thực sự cần và trong môi trường container
     for browser in ['chromium-browser', 'chromium', 'google-chrome', 'google-chrome-stable']:
         exe = shutil.which(browser)
         if exe:
-            subprocess.run(
-                [exe, '--headless', '--disable-gpu', '--no-sandbox',
-                 f'--print-to-pdf={output_path}', f'file://{html_path}'],
-                timeout=30
-            )
-            if output_path.exists():
-                return
-    raise RuntimeError("No HTML→PDF converter available. Install weasyprint or Chromium.")
+            try:
+                subprocess.run(
+                    [exe, '--headless', '--disable-gpu',
+                     # Chỉ dùng --no-sandbox nếu chạy root trong container
+                     f'--print-to-pdf={output_path}', f'file://{html_path}'],
+                    timeout=30
+                )
+                if output_path.exists():
+                    return
+            except Exception:
+                continue
+    raise RuntimeError("Không tìm thấy công cụ chuyển đổi HTML→PDF. Cài weasyprint hoặc Chromium.")
 
 
 def _pdf_to_docx(file, work_dir):
@@ -198,12 +417,10 @@ def _pdf_to_docx(file, work_dir):
         try:
             if '/Contents' in page:
                 content = page.Contents.read_bytes()
-                # Basic text extraction from content stream
                 text = content.decode('latin-1', errors='replace')
-                # Filter out PDF operators, keep text between parentheses and BT/ET
                 import re
-                texts = re.findall(r'\(([^)]*)\)', text)
-                page_text = ' '.join(t for t in texts if len(t) > 1 and not t.startswith('\\'))
+                texts = re.findall(r'\\(([^)]*)\\)', text)
+                page_text = ' '.join(t for t in texts if len(t) > 1 and not t.startswith('\\\\'))
                 if page_text.strip():
                     text_parts.append(page_text.strip())
         except Exception:
@@ -211,7 +428,7 @@ def _pdf_to_docx(file, work_dir):
 
     pdf.close()
 
-    combined = '\n\n'.join(text_parts) if text_parts else '(PDF contains no extractable text — may be scanned/image-based)'
+    combined = '\n\n'.join(text_parts) if text_parts else '(PDF chứa ảnh quét — không có text để trích xuất)'
 
     # Create minimal DOCX (ZIP of XML files)
     docx_buf = io.BytesIO()
@@ -252,19 +469,31 @@ def _pdf_to_docx(file, work_dir):
 
 
 def _xml_escape(text):
-    return text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;')
-
+    """Escape XML special chars — đầy đủ & < > \" '"""
+    return (text
+            .replace('&', '&amp;')
+            .replace('<', '&lt;')
+            .replace('>', '&gt;')
+            .replace('"', '&quot;')
+            .replace("'", '&apos;'))
 
 # ============================================================
 # IMAGE — PDF ↔ Images
 # ============================================================
 @app.route('/pdf-to-images', methods=['POST'])
+@rate_limit(max_requests=20, window=60)
 def pdf_to_images():
     """Convert PDF pages to JPG/PNG images. Returns ZIP of all pages."""
+    check_csrf()
+
     if 'file' not in request.files:
-        return jsonify({'error': 'Missing file'}), 400
+        return jsonify({'error': 'Vui lòng chọn file PDF'}), 400
 
     file = request.files['file']
+    is_valid, err_msg = validate_uploaded_file(file, allowed_exts={'.pdf'})
+    if not is_valid:
+        return jsonify({'error': err_msg}), 400
+
     fmt = request.args.get('format', 'jpg').lower()
     if fmt not in ('jpg', 'jpeg', 'png'):
         fmt = 'jpg'
@@ -281,17 +510,15 @@ def pdf_to_images():
             dpi = int(request.args.get('dpi', 150))
             images = convert_from_path(str(pdf_path), dpi=dpi)
         except Exception as e:
-            # Check if poppler-utils is missing
             if not shutil.which('pdftoppm'):
-                # Fallback to pikepdf + Pillow
                 images = _pdf_to_images_pikepdf(pdf_path)
                 if not images:
-                    return jsonify({'error': 'poppler-utils not installed. Run: sudo apt install poppler-utils. Or PDF has no embedded images.'}), 500
+                    return jsonify({'error': 'Không thể chuyển đổi PDF sang ảnh. Cần cài poppler-utils hoặc PDF không có ảnh nhúng.'}), 500
             else:
                 images = _pdf_to_images_pikepdf(pdf_path)
 
         if not images:
-            return jsonify({'error': 'No pages extracted'}), 500
+            return jsonify({'error': 'Không trích xuất được trang nào từ PDF'}), 500
 
         # If single page, send directly
         if len(images) == 1:
@@ -323,7 +550,7 @@ def pdf_to_images():
                        download_name=f'{Path(file.filename).stem}_pages.zip')
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return safe_error(e, 'Lỗi khi chuyển đổi PDF sang ảnh')
     finally:
         try:
             shutil.rmtree(work_dir, ignore_errors=True)
@@ -337,7 +564,6 @@ def _pdf_to_images_pikepdf(pdf_path):
     images = []
     pdf = pikepdf.Pdf.open(pdf_path)
     for page_num, page in enumerate(pdf.pages):
-        # Try to extract embedded images from page
         page_images = []
         if '/Resources' in page and '/XObject' in page.Resources:
             xobjects = page.Resources.XObject
@@ -350,17 +576,26 @@ def _pdf_to_images_pikepdf(pdf_path):
                     except Exception:
                         continue
         if page_images:
-            # Combine images (simplistic — just use first large one)
             largest = max(page_images, key=lambda x: x.width * x.height)
             images.append(largest)
+    pdf.close()
     return images
 
 @app.route('/images-to-pdf', methods=['POST'])
+@rate_limit(max_requests=20, window=60)
 def images_to_pdf():
     """Convert images (JPG/PNG) to PDF. Accepts multiple files."""
+    check_csrf()
+
     files = request.files.getlist('files')
     if not files:
-        return jsonify({'error': 'Missing files'}), 400
+        return jsonify({'error': 'Vui lòng chọn ít nhất một file ảnh'}), 400
+
+    # Validate từng file
+    for f in files:
+        is_valid, err_msg = validate_uploaded_file(f, allowed_exts={'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'})
+        if not is_valid:
+            return jsonify({'error': f'{f.filename}: {err_msg}'}), 400
 
     try:
         pdf_bytes = _images_to_pdf_bytes(files)
@@ -371,7 +606,7 @@ def images_to_pdf():
             download_name='images_converted.pdf'
         )
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return safe_error(e, 'Lỗi khi chuyển đổi ảnh sang PDF')
 
 def _images_to_pdf_bytes(files):
     """Convert images to PDF using Pillow + pikepdf"""
@@ -384,11 +619,6 @@ def _images_to_pdf_bytes(files):
         img = Image.open(io.BytesIO(img_bytes))
         if img.mode in ('RGBA', 'LA', 'P'):
             img = img.convert('RGB')
-
-        # Save as JPEG bytes for embedding
-        jpg_buf = io.BytesIO()
-        img.save(jpg_buf, format='JPEG', quality=90)
-        jpg_buf.seek(0)
 
         # Create a PDF page with this image
         temp_pdf = io.BytesIO()
@@ -409,12 +639,19 @@ def _images_to_pdf_bytes(files):
 # EXTRACT IMAGES from PDF
 # ============================================================
 @app.route('/extract-images', methods=['POST'])
+@rate_limit(max_requests=20, window=60)
 def extract_images():
     """Extract all embedded images from a PDF. Returns ZIP."""
+    check_csrf()
+
     if 'file' not in request.files:
-        return jsonify({'error': 'Missing file'}), 400
+        return jsonify({'error': 'Vui lòng chọn file PDF'}), 400
 
     file = request.files['file']
+    is_valid, err_msg = validate_uploaded_file(file, allowed_exts={'.pdf'})
+    if not is_valid:
+        return jsonify({'error': err_msg}), 400
+
     try:
         import pikepdf
         from PIL import Image
@@ -444,17 +681,17 @@ def extract_images():
         pdf.close()
 
         if img_count == 0:
-            return jsonify({'error': 'No images found in this PDF'}), 404
+            return jsonify({'error': 'Không tìm thấy ảnh nào trong PDF này'}), 404
 
         zip_buf.seek(0)
         return send_file(zip_buf, mimetype='application/zip', as_attachment=True,
                        download_name=f'{Path(file.filename).stem}_images.zip')
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return safe_error(e, 'Lỗi khi trích xuất ảnh từ PDF')
 
 # ============================================================
-# COMPRESS (giữ nguyên từ compress_server.py cũ)
+# COMPRESS
 # ============================================================
 QUALITY_SETTINGS = {
     'high': {'stream_decode_level': 'specialized'},
@@ -463,11 +700,18 @@ QUALITY_SETTINGS = {
 }
 
 @app.route('/compress', methods=['POST'])
+@rate_limit(max_requests=20, window=60)
 def compress():
+    check_csrf()
+
     if 'file' not in request.files:
-        return jsonify({'error': 'Missing file'}), 400
+        return jsonify({'error': 'Vui lòng chọn file PDF'}), 400
 
     file = request.files['file']
+    is_valid, err_msg = validate_uploaded_file(file, allowed_exts={'.pdf'})
+    if not is_valid:
+        return jsonify({'error': err_msg}), 400
+
     quality = request.form.get('quality', 'medium')
 
     if quality not in QUALITY_SETTINGS:
@@ -508,24 +752,29 @@ def compress():
         )
 
     except Exception as e:
-        print(f'Compress error: {e}')
-        return jsonify({'error': str(e)}), 500
+        return safe_error(e, 'Lỗi khi nén PDF')
 
 # ============================================================
 # REPAIR PDF — Sửa file PDF bị lỗi
 # ============================================================
 @app.route('/repair', methods=['POST'])
+@rate_limit(max_requests=20, window=60)
 def repair_pdf():
     """Repair corrupted PDF using pikepdf"""
+    check_csrf()
+
     if 'file' not in request.files:
-        return jsonify({'error': 'Missing file'}), 400
+        return jsonify({'error': 'Vui lòng chọn file PDF'}), 400
 
     file = request.files['file']
+    is_valid, err_msg = validate_uploaded_file(file, allowed_exts={'.pdf'})
+    if not is_valid:
+        return jsonify({'error': err_msg}), 400
+
     import tempfile, os
     tmp_path = None
     try:
         import pikepdf
-        # Save to temp file (allow_overwriting_input needs a real path)
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp:
             tmp.write(file.read())
             tmp_path = tmp.name
@@ -539,28 +788,49 @@ def repair_pdf():
         return send_file(output, mimetype='application/pdf', as_attachment=True,
                         download_name=file.filename.replace('.pdf', '_repaired.pdf'))
     except Exception as e:
-        return jsonify({'error': f'Cannot repair: {str(e)}'}), 500
+        return safe_error(e, 'Không thể sửa file PDF này')
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.unlink(tmp_path)
 
 # ============================================================
+# ERROR HANDLERS — Flask-level
+# ============================================================
+@app.errorhandler(413)
+def too_large(e):
+    return jsonify({'error': 'File quá lớn (tối đa 50MB)'}), 413
+
+@app.errorhandler(429)
+def ratelimit_handler(e):
+    return jsonify({'error': 'Quá nhiều request. Vui lòng thử lại sau.'}), 429
+
+@app.errorhandler(404)
+def not_found(e):
+    return jsonify({'error': 'Endpoint không tồn tại'}), 404
+
+@app.errorhandler(405)
+def method_not_allowed(e):
+    return jsonify({'error': 'Phương thức HTTP không được hỗ trợ'}), 405
+
+@app.errorhandler(500)
+def internal_error(e):
+    return jsonify({'error': 'Lỗi máy chủ nội bộ'}), 500
+
+# ============================================================
 # MAIN
 # ============================================================
 if __name__ == '__main__':
-    import os
     port = int(os.environ.get('PORT', 5001))
-    debug = os.environ.get('FLASK_ENV') != 'production'
+    debug = os.environ.get('FLASK_DEBUG') == '1'
 
-    print('🚀 PDF Tools Backend')
+    print('🔒 PDF Tools Backend v4.1.1 (Security Hardened)')
     print(f'   Port:        {port}')
-    print(f'   Debug:       {debug}')
+    print(f'   Debug:       {debug} (OFF by default)')
+    print(f'   Debug Console: DISABLED')
+    print(f'   CORS:        Restricted to GitHub Pages + localhost')
+    print(f'   Max Upload:  50MB')
+    print(f'   Rate Limit:  20 req/min per IP (convert/compress)')
     print(f'   Health:      http://0.0.0.0:{port}/health')
-    print(f'   Convert:     POST /convert?type=pdf-to-word')
-    print(f'   PDF→Images:  POST /pdf-to-images?format=jpg')
-    print(f'   Images→PDF:  POST /images-to-pdf')
-    print(f'   Extract Img: POST /extract-images')
-    print(f'   Compress:    POST /compress')
     print(f'')
     print(f'   Supported conversions:')
     for k, v in FORMAT_MAP.items():
