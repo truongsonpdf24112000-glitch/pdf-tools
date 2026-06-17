@@ -63,7 +63,7 @@ function renderSidebar(activeId) {
     </div>
     <nav class="tool-nav">${nav}</nav>
     <div class="sidebar-footer">
-      <span style="font-size:0.7rem;color:var(--text-muted);">v5.0.0 · 4 tools</span>
+      <span style="font-size:0.7rem;color:var(--text-muted);">v5.1.0 · 4 tools</span>
       <button class="theme-toggle" id="theme-toggle" title="Đổi giao diện">🌙</button>
     </div>`;
 
@@ -111,6 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const h = window.location.hash.replace('#', '');
   renderSidebar(h || 'home');
   setupMobile();
+  setupKeyboardShortcuts();
   if (toolMap[h]) activateTool(h); else showHome();
   window.addEventListener('hashchange', () => { const nh = window.location.hash.replace('#',''); if (toolMap[nh]) activateTool(nh); else showHome(); });
 });
@@ -159,5 +160,53 @@ function showHome() {
     e.preventDefault();
     zone.classList.remove('drag-over');
     if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  });
+}
+
+// Keyboard Shortcuts
+function setupKeyboardShortcuts() {
+  document.addEventListener('keydown', (e) => {
+    // Ignore if typing in an input/textarea
+    const tag = document.activeElement?.tagName?.toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select' || document.activeElement?.isContentEditable) return;
+
+    const ctrl = e.ctrlKey || e.metaKey;
+
+    // Ctrl+S — trigger download button
+    if (ctrl && e.key === 's') {
+      e.preventDefault();
+      const btn = document.getElementById('btn-action');
+      if (btn && !btn.disabled) btn.click();
+      return;
+    }
+
+    // Ctrl+O — open file picker
+    if (ctrl && e.key === 'o') {
+      e.preventDefault();
+      const input = document.getElementById('file-input');
+      if (input) input.click();
+      return;
+    }
+
+    // Escape — go home
+    if (e.key === 'Escape') {
+      showHome();
+      return;
+    }
+
+    // Left/Right arrows — page navigation (for redact/sign modes)
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      const prevBtn = document.getElementById('btn-prev-page');
+      const nextBtn = document.getElementById('btn-next-page');
+      if (e.key === 'ArrowLeft' && prevBtn && !prevBtn.disabled) { prevBtn.click(); return; }
+      if (e.key === 'ArrowRight' && nextBtn && !nextBtn.disabled) { nextBtn.click(); return; }
+    }
+
+    // 1-5 — mode switching
+    if (e.key >= '1' && e.key <= '5') {
+      const modeBtns = document.querySelectorAll('.mode-btn');
+      const idx = parseInt(e.key) - 1;
+      if (modeBtns[idx]) { modeBtns[idx].click(); return; }
+    }
   });
 }

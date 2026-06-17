@@ -90,7 +90,7 @@
     <div class="footer-content">
       <div class="footer-brand">
         <strong>Chỉnh Sửa PDF</strong>
-        <span>v5.0.0 · 4 nhóm công cụ</span>
+        <span>v5.1.0 · 4 nhóm công cụ + PWA</span>
       </div>
       <div class="footer-links">
         <span>Xử lý 100% trên trình duyệt — File không rời khỏi máy bạn</span>
@@ -102,5 +102,13 @@
   </footer>
 
   <script type="module" src="js/app.js"></script>
+  <script>
+    // Register Service Worker for PWA offline support
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/pdf-tools/sw.js')
+        .then(reg => console.log('SW registered:', reg.scope))
+        .catch(err => console.log('SW registration failed:', err));
+    }
+  </script>
 </body>
 </html>

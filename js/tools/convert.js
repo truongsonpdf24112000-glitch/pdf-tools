@@ -97,6 +97,200 @@ class PDFConvertTool {
 
   // ─── COMMON HELPERS ───────────────────────────────────────
 
+  setupBatchUpload(type) {
+    const zone = document.getElementById('upload-zone');
+    const input = document.getElementById('file-input');
+    if (!zone || !input) return;
+
+    zone.addEventListener('click', () => input.click());
+    input.addEventListener('change', (e) => {
+      if (e.target.files.length === 1) {
+        // Single file — use original flow
+        const file = e.target.files[0];
+        if (this.validateOfficeFile(file)) {
+          this.fileName = file.name;
+          this.fileSize = file.size;
+          file.arrayBuffer().then(buf => {
+            this.bytes = new Uint8Array(buf);
+            this.showOfficeToPdfSelection();
+          });
+        }
+      } else if (e.target.files.length > 1) {
+        // Batch mode
+        this.batchFiles = Array.from(e.target.files).filter(f => this.validateOfficeFile(f, false));
+        if (this.batchFiles.length === 0) {
+          showToast('Không có file Office hợp lệ', 'error');
+        } else {
+          this.showBatchOfficeUI();
+        }
+      }
+    });
+
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+    zone.addEventListener('drop', e => {
+      e.preventDefault();
+      zone.classList.remove('drag-over');
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length === 1) {
+        const file = files[0];
+        if (this.validateOfficeFile(file)) {
+          this.fileName = file.name;
+          this.fileSize = file.size;
+          file.arrayBuffer().then(buf => {
+            this.bytes = new Uint8Array(buf);
+            this.showOfficeToPdfSelection();
+          });
+        }
+      } else if (files.length > 1) {
+        this.batchFiles = files.filter(f => this.validateOfficeFile(f, false));
+        if (this.batchFiles.length > 0) this.showBatchOfficeUI();
+      }
+    });
+  }
+
+  validateOfficeFile(file, showError = true) {
+    const ext = '.' + file.name.split('.').pop().toLowerCase();
+    const valid = ['.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt'];
+    if (!valid.includes(ext)) {
+      if (showError) showToast('Vui lòng chọn file Office', 'error');
+      return false;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      if (showError) showToast('File quá lớn (tối đa 50MB)', 'error');
+      return false;
+    }
+    return true;
+  }
+
+  showBatchOfficeUI() {
+    const zone = document.getElementById('upload-zone');
+    zone.className = 'upload-zone compact';
+    zone.innerHTML = `
+      <span class="upload-icon">📂</span>
+      <div class="upload-text">
+        <h3>${this.batchFiles.length} file đã chọn</h3>
+        <span class="sub">Click để chọn lại hoặc kéo thêm file</span>
+      </div>
+    `;
+
+    const results = document.getElementById('results-area');
+    results.style.display = 'block';
+    const totalSize = this.batchFiles.reduce((s, f) => s + f.size, 0);
+
+    results.innerHTML = `
+      <div class="toolbar">
+        <span class="page-count">📑 ${this.batchFiles.length} file · ${formatFileSize(totalSize)}</span>
+        <button class="btn btn-primary" id="btn-batch-convert">🔄 Chuyển tất cả sang PDF</button>
+      </div>
+      <div class="batch-file-list">
+        ${this.batchFiles.map((f, i) => `
+          <div class="batch-file-item">
+            <span class="file-icon">📄</span>
+            <span class="file-name">${this.escapeHtml(f.name)}</span>
+            <span class="file-size">${formatFileSize(f.size)}</span>
+            <button class="remove-btn" data-idx="${i}" title="Xóa">×</button>
+          </div>
+        `).join('')}
+      </div>
+      <p id="backend-status" style="font-size:0.75rem;text-align:center;margin-top:8px;color:var(--text-muted);"></p>
+    `;
+
+    this.checkBackend(results);
+
+    document.querySelectorAll('.remove-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.idx);
+        this.batchFiles.splice(idx, 1);
+        if (this.batchFiles.length <= 1) {
+          // Fall back to single file mode
+          const f = this.batchFiles[0];
+          if (f) {
+            this.fileName = f.name;
+            this.fileSize = f.size;
+            f.arrayBuffer().then(buf => {
+              this.bytes = new Uint8Array(buf);
+              this.showOfficeToPdfSelection();
+            });
+          } else {
+            results.style.display = 'none';
+            results.innerHTML = '';
+            zone.className = 'upload-zone';
+            zone.innerHTML = '<div class="upload-icon">📝➡️📄</div><h3>Kéo thả file Office vào đây</h3><p class="sub">Chuyển đổi tài liệu văn phòng sang PDF</p>';
+          }
+        } else {
+          this.showBatchOfficeUI();
+        }
+      });
+    });
+
+    document.getElementById('btn-batch-convert')?.addEventListener('click', () => this.doBatchConvert());
+  }
+
+  async doBatchConvert() {
+    const btn = document.getElementById('btn-batch-convert');
+    if (!btn) return;
+    btn.disabled = true;
+    const total = this.batchFiles.length;
+    const results = [];
+
+    for (let i = 0; i < this.batchFiles.length; i++) {
+      const file = this.batchFiles[i];
+      btn.textContent = `⏳ ${i + 1}/${total}: ${file.name.substring(0, 30)}...`;
+      
+      try {
+        const buf = await file.arrayBuffer();
+        const fd = new FormData();
+        fd.append('file', new Blob([buf]), file.name);
+        const resp = await fetch(`${this.backendUrl}/convert`, { method: 'POST', body: fd });
+        if (resp.ok) {
+          const blob = await resp.blob();
+          const pdfName = file.name.replace(/\.[^.]+$/, '.pdf');
+          results.push({ name: pdfName, blob });
+        } else {
+          showToast(`Lỗi khi chuyển ${file.name}`, 'error');
+        }
+      } catch (err) {
+        showToast(`Lỗi: ${file.name} - ${err.message}`, 'error');
+      }
+    }
+
+    if (results.length === 0) {
+      showToast('Không có file nào được chuyển đổi thành công', 'error');
+    } else if (results.length === 1) {
+      // Single result — download directly
+      const url = URL.createObjectURL(results[0].blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = results[0].name; a.click();
+      URL.revokeObjectURL(url);
+      showToast('Đã chuyển đổi 1 file sang PDF!', 'success');
+    } else {
+      // Multiple results — zip them
+      const url = await this.zipResults(results);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'office_to_pdf_batch.zip'; a.click();
+      URL.revokeObjectURL(url);
+      showToast(`Đã chuyển đổi ${results.length} file sang PDF!`, 'success');
+    }
+
+    btn.textContent = '🔄 Chuyển tất cả sang PDF';
+    btn.disabled = false;
+  }
+
+  async zipResults(results) {
+    // Simple client-side ZIP using raw format
+    // For browsers without ZIP support, we create individual downloads
+    // Using a simple approach: download each file sequentially
+    for (const r of results) {
+      const url = URL.createObjectURL(r.blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = r.name; a.click();
+      URL.revokeObjectURL(url);
+      await new Promise(r => setTimeout(r, 300));
+    }
+    return URL.createObjectURL(new Blob([''])); // fallback
+  }
+
   escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str;
@@ -258,20 +452,12 @@ class PDFConvertTool {
         <div class="upload-icon">📝➡️📄</div>
         <h3>Kéo thả file Word, Excel hoặc PowerPoint vào đây</h3>
         <p class="sub">Chuyển đổi tài liệu văn phòng sang PDF</p>
-        <p class="sub" style="margin-top:4px;font-size:0.7rem;">Hỗ trợ: .docx, .xlsx, .pptx, .doc, .xls, .ppt</p>
+        <p class="sub" style="margin-top:4px;font-size:0.7rem;">Hỗ trợ: .docx, .xlsx, .pptx, .doc, .xls, .ppt — Có thể chọn nhiều file cùng lúc</p>
       </div>
-      <input type="file" id="file-input" accept=".docx,.doc,.xlsx,.xls,.pptx,.ppt" hidden>
+      <input type="file" id="file-input" accept=".docx,.doc,.xlsx,.xls,.pptx,.ppt" multiple hidden>
       <div id="results-area" style="display:none;"></div>
     `;
-    this.setupGenericUpload(async (file) => {
-      const valid = ['.docx','.doc','.xlsx','.xls','.pptx','.ppt'];
-      const ext = '.' + file.name.split('.').pop().toLowerCase();
-      if (!valid.includes(ext)) { showToast('Vui lòng chọn file Office', 'error'); return; }
-      if (file.size > 50*1024*1024) { showToast('File quá lớn (tối đa 50MB)', 'error'); return; }
-      this.fileName = file.name; this.fileSize = file.size;
-      this.bytes = new Uint8Array(await file.arrayBuffer());
-      this.showOfficeToPdfSelection();
-    });
+    this.setupBatchUpload('office');
     this.checkBackend(container);
   }
 

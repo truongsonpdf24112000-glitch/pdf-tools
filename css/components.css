@@ -1649,3 +1649,176 @@ input[type="checkbox"] {
   margin-top: 8px;
   opacity: 0.7;
 }
+
+/* ===== Progress Bar ===== */
+.progress-container {
+  margin: 16px 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  animation: fadeIn var(--transition);
+}
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+.progress-label .progress-text {
+  color: var(--accent);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.progress-bar-track {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-input);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+  border-radius: 3px;
+  width: 0%;
+  transition: width 0.3s ease;
+  box-shadow: 0 0 8px var(--accent-glow);
+}
+.progress-container.complete .progress-bar-fill {
+  background: linear-gradient(90deg, var(--success), #00e676);
+  box-shadow: 0 0 8px rgba(0,200,83,0.4);
+}
+
+/* ===== Keyboard Shortcut Hint ===== */
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  vertical-align: middle;
+}
+.shortcut-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
+/* ===== Batch Processing ===== */
+.batch-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0;
+}
+.batch-file-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.batch-file-item .file-icon { font-size: 1.3rem; }
+.batch-file-item .file-name {
+  flex: 1;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.batch-file-item .file-size {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.batch-file-item .remove-btn {
+  background: none;
+  border: none;
+  color: var(--danger);
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.batch-file-item .remove-btn:hover { background: rgba(255,71,87,0.1); }
+.batch-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+/* ===== Sign & Stamp ===== */
+.sign-canvas-container {
+  position: relative;
+  display: inline-block;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.sign-canvas-container canvas {
+  display: block;
+  cursor: crosshair;
+}
+.sign-upload-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 100px;
+  padding: 24px;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  margin: 16px 0;
+}
+.sign-upload-zone:hover { border-color: var(--accent); }
+.sign-preview {
+  max-width: 150px;
+  max-height: 80px;
+  object-fit: contain;
+}
+
+/* ===== Drag Insert Indicator ===== */
+.insert-indicator {
+  position: absolute;
+  width: 3px;
+  height: 100%;
+  background: var(--accent);
+  box-shadow: 0 0 12px var(--accent-glow);
+  pointer-events: none;
+  z-index: 10;
+  transition: left 0.1s ease;
+}
+
+/* ===== Rotate Badge ===== */
+.rotate-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+  margin-left: 4px;
+  vertical-align: middle;
+  animation: fadeIn 0.2s ease;
+}

@@ -1,6 +1,6 @@
 // js/tools/edit.js — Công cụ chỉnh sửa PDF cơ bản: Sắp xếp, Trộn, Tách, Xoay, Xóa
 import { PDFEngine } from '../utils/pdf-engine.js';
-import { showToast, showLoading, hideLoading, formatFileSize } from '../utils/ui-helpers.js';
+import { showToast, showLoading, hideLoading, formatFileSize, showProgress, escapeHtml } from '../utils/ui-helpers.js';
 
 const MODES = [
   { id: 'reorder', label: 'Sắp xếp', icon: '📑', desc: 'Kéo thả để sắp xếp lại thứ tự trang' },
@@ -107,7 +107,7 @@ class PDFEditTool {
       return `
         <span class="upload-icon">📄</span>
         <div class="upload-text">
-          <h3>${this.escapeHtml(this.fileName)}</h3>
+          <h3>${escapeHtml(this.fileName)}</h3>
           <span class="sub">${formatFileSize(this.fileSize)} · ${this.pages.length} trang</span>
         </div>
         <button class="change-btn" id="change-file-btn">Đổi file</button>
@@ -179,22 +179,38 @@ class PDFEditTool {
       }
     });
 
-    // Also allow dropping onto the whole container
+    // Container drop — handle file insert (drag onto thumbnails)
     const container = document.getElementById('tool-container');
+    let insertIndicator = null;
+
     container.addEventListener('dragover', (e) => {
       e.preventDefault();
       if (this.mode === 'merge' || !this.pdfDoc) {
         zone.classList.add('drag-over');
+      } else {
+        // Show insert indicator between thumbnails
+        this.showInsertIndicator(e.clientX, e.clientY, insertIndicator, container);
       }
     });
-    container.addEventListener('drop', (e) => {
+    container.addEventListener('dragleave', (e) => {
+      if (insertIndicator) { insertIndicator.remove(); insertIndicator = null; }
+    });
+    container.addEventListener('drop', async (e) => {
       e.preventDefault();
       zone.classList.remove('drag-over');
+      if (insertIndicator) { insertIndicator.remove(); insertIndicator = null; }
+
       if (e.dataTransfer.files.length > 0) {
         if (this.mode === 'merge') {
           if (this.mergeFiles.length === 0) this.addMergeFiles(Array.from(e.dataTransfer.files));
         } else if (!this.pdfDoc) {
           this.handleSingleFile(e.dataTransfer.files[0]);
+        } else {
+          // Insert dropped PDF at insertion point
+          const insertIdx = this.getInsertIndex(e.clientX, e.clientY, container);
+          if (insertIdx !== null) {
+            await this.insertPdfAt(e.dataTransfer.files[0], insertIdx);
+          }
         }
       }
     });
@@ -213,13 +229,21 @@ class PDFEditTool {
     }
 
     const container = document.getElementById('tool-container');
-    showLoading(container);
 
     try {
+      // Show progress bar
+      const progress = showProgress(container, `Đang đọc ${escapeHtml(file.name)}...`);
+      progress.setProgress(10, 'Đang tải PDF...');
+
       const buffer = await file.arrayBuffer();
+      progress.setProgress(30, 'Đang phân tích...');
+
       const { pdfDoc, pdfjsDoc, pageCount } = await PDFEngine.load(buffer);
+      progress.setProgress(40, `Đã load ${pageCount} trang`);
+
+      // Render thumbnails with progress (chunked, non-blocking)
       const scale = pageCount > 50 ? 0.2 : 0.35;
-      const pages = await PDFEngine.renderThumbnails(pdfjsDoc, scale);
+      const pages = await PDFEngine.renderThumbnailsWithProgress(pdfjsDoc, scale, container);
 
       this.pdfDoc = pdfDoc;
       this.pdfjsDoc = pdfjsDoc;
@@ -231,12 +255,13 @@ class PDFEditTool {
       this.rotations = new Map();
       this.deletedPages = new Set();
 
-      hideLoading();
       this.renderSingleResults();
     } catch (err) {
-      hideLoading();
       console.error('PDF load error:', err);
       showToast('Không thể đọc file PDF. File có thể bị hỏng hoặc có mật khẩu.', 'error');
+      // Clean up progress bar
+      const pb = document.getElementById('progress-bar');
+      if (pb) pb.remove();
     }
   }
 
@@ -432,35 +457,44 @@ class PDFEditTool {
   renderRotateResults(results) {
     const { pages, rotations } = this;
     const cols = pages.length < 3 ? pages.length : pages.length < 6 ? pages.length : 6;
+    const hasRotations = rotations.size > 0;
 
     results.innerHTML = `
-      <div class="toolbar">
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div class="toolbar" style="flex-wrap:wrap;gap:12px;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <span class="page-count">📑 ${pages.length} trang</span>
+          ${hasRotations ? `<span style="font-size:0.8rem;color:var(--accent);">(${rotations.size} trang đã xoay)</span>` : ''}
+          <span style="color:var(--text-muted);font-size:0.78rem;">·</span>
+          <button class="btn btn-secondary btn-sm" id="btn-rotate-all-left" title="Xoay tất cả sang trái 90°">↺ Xoay tất cả</button>
+          <button class="btn btn-secondary btn-sm" id="btn-rotate-all-right" title="Xoay tất cả sang phải 90°">↻ Xoay tất cả</button>
+          ${hasRotations ? '<button class="btn btn-secondary btn-sm" id="btn-reset-all" title="Reset tất cả về 0°">↩ Reset</button>' : ''}
         </div>
-        <button class="btn btn-primary" id="btn-action" ${rotations.size === 0 ? 'disabled' : ''}>
-          ⬇️ Tải PDF đã xoay
+        <button class="btn btn-primary" id="btn-action">
+          ⬇️ Tải PDF${hasRotations ? ' đã xoay' : ''}
         </button>
       </div>
       <div class="thumbnail-grid" id="thumbnail-grid"
            style="grid-template-columns: repeat(${cols}, 200px);">
         ${pages.map((p, idx) => {
           const angle = rotations.get(idx) || 0;
-          const rotateStyle = angle ? `transform: rotate(${angle}deg);` : '';
           return `
-            <div class="thumbnail-card rotate-card ${rotations.has(idx) ? 'has-rotation' : ''}"
-                 data-page-index="${idx}">
-              <div class="thumbnail-wrapper" style="${rotateStyle}">
+            <div class="thumbnail-card rotate-card" data-page-index="${idx}">
+              <div class="thumbnail-wrapper" id="tw-${idx}" style="transition: transform 0.3s ease;${angle ? `transform: rotate(${angle}deg);` : ''}">
                 <img src="${p.thumbnail}" alt="Trang ${idx + 1}" width="${p.width}" height="${p.height}">
               </div>
-              <span class="page-number">${idx + 1}</span>
+              <span class="page-number" id="pn-${idx}">${idx + 1}</span>
+              ${angle ? `<span class="rotate-badge" id="rb-${idx}">${angle}°</span>` : ''}
               <div class="rotate-controls">
-                <button class="btn-rotate" data-action="cw" data-page="${idx}" title="Xoay 90°">↻</button>
-                ${rotations.has(idx) ? '<button class="btn-rotate btn-reset" data-action="reset" data-page="'+idx+'" title="Reset">↩</button>' : ''}
+                <button class="btn-rotate" data-action="ccw" data-page="${idx}" title="Xoay trái 90°">↺</button>
+                <button class="btn-rotate" data-action="cw" data-page="${idx}" title="Xoay phải 90°">↻</button>
               </div>
             </div>
           `;
         }).join('')}
+      </div>
+      <div class="shortcut-hint" style="margin-top:12px;">
+        <span class="kbd">Ctrl</span> + <span class="kbd">S</span> Tải PDF &nbsp;|&nbsp;
+        <span class="kbd">1</span>–<span class="kbd">5</span> Đổi chế độ
       </div>
     `;
 
@@ -469,31 +503,128 @@ class PDFEditTool {
   }
 
   setupRotateControls() {
+    // Individual page rotate buttons — instant CSS update
     document.querySelectorAll('.btn-rotate').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const pageIdx = parseInt(btn.dataset.page);
         const action = btn.dataset.action;
-        const current = this.rotations.get(pageIdx) || 0;
+        let current = this.rotations.get(pageIdx) || 0;
 
         if (action === 'cw') {
-          // Mỗi lần click xoay 90° theo chiều kim đồng hồ
-          this.rotations.set(pageIdx, ((current + 90) % 360 + 360) % 360);
-        } else if (action === 'reset') {
-          this.rotations.delete(pageIdx);
+          current = ((current + 90) % 360 + 360) % 360;
+        } else if (action === 'ccw') {
+          current = ((current - 90) % 360 + 360) % 360;
         }
 
-        if (this.rotations.get(pageIdx) === 0 || this.rotations.get(pageIdx) === 360) {
+        // Update state
+        if (current === 0 || current === 360) {
           this.rotations.delete(pageIdx);
+        } else {
+          this.rotations.set(pageIdx, current);
         }
 
-        // Re-render to update visuals and download button state
-        const results = document.getElementById('results-area');
-        this.renderRotateResults(results);
-        this.setupRotateControls();
-        this.setupRotateDownload();
+        // INSTANT visual update — no re-render
+        this.updateRotateCardUI(pageIdx, current);
       });
     });
+
+    // Rotate All Left
+    document.getElementById('btn-rotate-all-left')?.addEventListener('click', () => {
+      for (let i = 0; i < this.pages.length; i++) {
+        const current = this.rotations.get(i) || 0;
+        const newAngle = ((current - 90) % 360 + 360) % 360;
+        if (newAngle === 0 || newAngle === 360) {
+          this.rotations.delete(i);
+        } else {
+          this.rotations.set(i, newAngle);
+        }
+        this.updateRotateCardUI(i, newAngle);
+      }
+    });
+
+    // Rotate All Right
+    document.getElementById('btn-rotate-all-right')?.addEventListener('click', () => {
+      for (let i = 0; i < this.pages.length; i++) {
+        const current = this.rotations.get(i) || 0;
+        const newAngle = ((current + 90) % 360 + 360) % 360;
+        if (newAngle === 0 || newAngle === 360) {
+          this.rotations.delete(i);
+        } else {
+          this.rotations.set(i, newAngle);
+        }
+        this.updateRotateCardUI(i, newAngle);
+      }
+    });
+
+    // Reset All
+    document.getElementById('btn-reset-all')?.addEventListener('click', () => {
+      for (let i = 0; i < this.pages.length; i++) {
+        this.rotations.delete(i);
+        this.updateRotateCardUI(i, 0);
+      }
+    });
+  }
+
+  // Update a single card's rotation UI instantly (no re-render)
+  updateRotateCardUI(pageIdx, angle) {
+    const wrapper = document.getElementById(`tw-${pageIdx}`);
+    if (wrapper) {
+      wrapper.style.transform = angle ? `rotate(${angle}deg)` : '';
+    }
+
+    // Update badge
+    const badge = document.getElementById(`rb-${pageIdx}`);
+    if (angle && angle !== 0 && angle !== 360) {
+      if (badge) {
+        badge.textContent = angle + '°';
+      } else {
+        const card = document.querySelector(`.thumbnail-card[data-page-index="${pageIdx}"]`);
+        const pageNum = document.getElementById(`pn-${pageIdx}`);
+        if (card && pageNum) {
+          const newBadge = document.createElement('span');
+          newBadge.className = 'rotate-badge';
+          newBadge.id = `rb-${pageIdx}`;
+          newBadge.textContent = angle + '°';
+          pageNum.insertAdjacentElement('afterend', newBadge);
+        }
+      }
+    } else {
+      if (badge) badge.remove();
+    }
+
+    // Update toolbar: count + download button text
+    const hasRotations = this.rotations.size > 0;
+    const countEl = document.querySelector('.toolbar .page-count + span');
+    if (countEl && countEl.style) {
+      countEl.textContent = hasRotations ? `(${this.rotations.size} trang đã xoay)` : '';
+    }
+    const btn = document.getElementById('btn-action');
+    if (btn) {
+      btn.textContent = hasRotations ? `⬇️ Tải PDF đã xoay` : '⬇️ Tải PDF';
+    }
+
+    // Show/hide reset all button
+    let resetBtn = document.getElementById('btn-reset-all');
+    if (hasRotations && !resetBtn) {
+      const rotateAllRight = document.getElementById('btn-rotate-all-right');
+      if (rotateAllRight) {
+        resetBtn = document.createElement('button');
+        resetBtn.className = 'btn btn-secondary btn-sm';
+        resetBtn.id = 'btn-reset-all';
+        resetBtn.textContent = '↩ Reset';
+        resetBtn.title = 'Reset tất cả về 0°';
+        resetBtn.addEventListener('click', () => {
+          for (let i = 0; i < this.pages.length; i++) {
+            this.rotations.delete(i);
+            this.updateRotateCardUI(i, 0);
+          }
+        });
+        rotateAllRight.insertAdjacentElement('afterend', resetBtn);
+      }
+    } else if (!hasRotations && resetBtn) {
+      resetBtn.remove();
+    }
   }
 
   setupRotateDownload() {
@@ -514,7 +645,11 @@ class PDFEditTool {
         console.error('Rotate error:', err);
         showToast('Có lỗi khi xoay PDF', 'error');
       } finally {
-        setTimeout(() => { btn.disabled = false; btn.textContent = '⬇️ Tải PDF đã xoay'; }, 2000);
+        setTimeout(() => {
+          btn.disabled = false;
+          const hasRotations = this.rotations.size > 0;
+          btn.textContent = hasRotations ? '⬇️ Tải PDF đã xoay' : '⬇️ Tải PDF';
+        }, 2000);
       }
     });
   }
@@ -681,7 +816,7 @@ class PDFEditTool {
             <span class="drag-handle">⠿</span>
             <span class="file-icon">📄</span>
             <div class="file-info">
-              <span class="file-name">${this.escapeHtml(f.name)}</span>
+              <span class="file-name">${escapeHtml(f.name)}</span>
               <span class="file-meta">${formatFileSize(f.size)} · ${f.pageCount} trang</span>
             </div>
             <button class="btn-remove" data-remove="${i}" title="Xóa">×</button>
@@ -751,13 +886,93 @@ class PDFEditTool {
     });
   }
 
+  // ─── DRAG INSERT ────────────────────────────────────────────
+
+  showInsertIndicator(clientX, clientY, indicator, container) {
+    const cards = document.querySelectorAll('.thumbnail-card');
+    if (cards.length === 0) return;
+    
+    let insertIdx = null;
+    let insertLeft = 0;
+    
+    for (let i = 0; i < cards.length; i++) {
+      const rect = cards[i].getBoundingClientRect();
+      const midX = rect.left + rect.width / 2;
+      if (clientX < midX) { insertIdx = i; insertLeft = rect.left; break; }
+    }
+    if (insertIdx === null) {
+      const lastRect = cards[cards.length - 1].getBoundingClientRect();
+      insertIdx = cards.length;
+      insertLeft = lastRect.right;
+    }
+    
+    const containerRect = container.getBoundingClientRect();
+    const relativeLeft = insertLeft - containerRect.left;
+    
+    if (!indicator) {
+      indicator = document.createElement('div');
+      indicator.className = 'insert-indicator';
+      container.appendChild(indicator);
+    }
+    // Find a thumbnail card for height reference
+    const cardRect = cards[0].getBoundingClientRect();
+    indicator.style.left = relativeLeft + 'px';
+    indicator.style.top = (cardRect.top - containerRect.top) + 'px';
+    indicator.style.height = cardRect.height + 'px';
+    indicator.style.display = 'block';
+  }
+
+  getInsertIndex(clientX, clientY, container) {
+    const cards = document.querySelectorAll('.thumbnail-card');
+    if (cards.length === 0) return null;
+    
+    for (let i = 0; i < cards.length; i++) {
+      const rect = cards[i].getBoundingClientRect();
+      const midX = rect.left + rect.width / 2;
+      if (clientX < midX) return i;
+    }
+    return cards.length; // after last card
+  }
+
+  async insertPdfAt(file, position) {
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      showToast('Chỉ hỗ trợ chèn file PDF', 'error');
+      return;
+    }
+    
+    const container = document.getElementById('tool-container');
+    const progress = showProgress(container, `Đang chèn ${escapeHtml(file.name)}...`);
+    
+    try {
+      progress.setProgress(15, 'Đang đọc file...');
+      const buffer = await file.arrayBuffer();
+      const { pdfDoc: insertDoc, pageCount: insertPages } = await PDFEngine.load(buffer);
+      progress.setProgress(50, `Đã đọc ${insertPages} trang`);
+      
+      const pdfBytes = await PDFEngine.insertPDF(this.pdfDoc, insertDoc, position);
+      progress.done('✓ Đã chèn xong');
+      
+      // Re-load the combined PDF
+      const newPdfBlob = new Blob([pdfBytes]);
+      const newFile = new File([newPdfBlob], this.fileName, { type: 'application/pdf' });
+      this.pdfDoc = null;
+      this.pdfjsDoc = null;
+      this.pages = [];
+      
+      // Use a flag to prevent re-upload UI
+      await this.handleSingleFile(newFile);
+      showToast(`Đã chèn ${insertPages} trang từ "${file.name}" vào vị trí ${position + 1}`, 'success');
+    } catch (err) {
+      console.error('Insert error:', err);
+      showToast('Không thể chèn file PDF', 'error');
+      const pb = document.getElementById('progress-bar');
+      if (pb) pb.remove();
+    }
+  }
+
   // ─── UTILS ─────────────────────────────────────────────────
 
-  escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-  }
+  // (using escapeHtml from ui-helpers.js)
 }
 
 const tool = new PDFEditTool();

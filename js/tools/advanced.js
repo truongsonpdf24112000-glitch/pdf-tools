@@ -14,6 +14,7 @@ const MODES = [
   { id: "page-num",      label: "Số trang",      icon: "🔢", desc: "Thêm số trang vào PDF" },
   { id: "lock",          label: "Khóa/Mở khóa",  icon: "🔒", desc: "Đặt mật khẩu hoặc mở khóa PDF" },
   { id: "extract-img",   label: "Trích xuất ảnh", icon: "🖼️", desc: "Trích xuất tất cả ảnh từ PDF" },
+  { id: "sign",          label: "Ký & Đóng dấu", icon: "✍️", desc: "Ký tên hoặc đóng dấu lên PDF" },
 ];
 
 class PDFAdvancedTool {
@@ -70,6 +71,13 @@ class PDFAdvancedTool {
     this.isEncrypted = false;
     // extract-img
     // (uses shared state + backendUrl)
+    // sign
+    this.signImage = null;       // Uint8Array of signature image
+    this.signPlacements = [];    // [{page, x, y, width, height}]
+    this.signActivePage = 0;
+    this.signImgNaturalWidth = 0;
+    this.signImgNaturalHeight = 0;
+    this.signPreviewScale = 0.4; // scale on canvas
   }
 
   async init() {
@@ -235,6 +243,9 @@ class PDFAdvancedTool {
       this.compressedBytes = null;
       this.compressedSize = null;
       this.isEncrypted = false;
+      this.signImage = null;
+      this.signPlacements = [];
+      this.signActivePage = 0;
 
       // Detect encryption for lock mode
       try {
@@ -283,6 +294,7 @@ class PDFAdvancedTool {
       case "page-num":      this.renderPageNumMode(results);       break;
       case "lock":          this.renderLockMode(results);          break;
       case "extract-img":   this.renderExtractImgMode(results);    break;
+      case "sign":          this.renderSignMode(results);          break;
     }
   }
 
@@ -1358,6 +1370,234 @@ class PDFAdvancedTool {
       }
     }
     btn.textContent = "🔍 Trích xuất ảnh"; btn.disabled = false;
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // 11. SIGN & STAMP MODE
+  // ═══════════════════════════════════════════════════════════════
+
+  renderSignMode(results) {
+    const { pages, pageCount, signImage, signPlacements, signActivePage } = this;
+
+    results.innerHTML =
+      '<div class="toolbar">' +
+        '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">' +
+          '<span class="page-count">📄 ' + pageCount + ' trang</span>' +
+          (!signImage ? 
+            '<span style="color:var(--text-muted);font-size:0.82rem;">→ Tải ảnh chữ ký hoặc con dấu lên trước</span>' :
+            '<span style="color:var(--success);font-size:0.82rem;">✅ Đã có ảnh — Click lên trang để đặt</span>'
+          ) +
+          (signPlacements.length > 0 ? 
+            '<span style="color:var(--accent);font-size:0.82rem;">Đã đặt ' + signPlacements.length + ' vị trí</span>' : ''
+          ) +
+        '</div>' +
+        '<div style="display:flex;gap:8px;">' +
+          (signPlacements.length > 0 ? '<button class="btn btn-secondary btn-sm" id="btn-clear-sign">Xóa hết</button>' : '') +
+          '<button class="btn btn-primary" id="btn-sign"' + (!signImage ? ' disabled' : '') + '>✍️ Ký & Tải PDF</button>' +
+        '</div>' +
+      '</div>' +
+
+      // Signature upload zone (if no image loaded)
+      (!signImage ?
+        '<div class="sign-upload-zone" id="sign-upload-zone">' +
+          '<span style="font-size:2rem;">🖊️</span>' +
+          '<span>Tải ảnh chữ ký hoặc con dấu (PNG/JPG)</span>' +
+          '<span style="font-size:0.72rem;color:var(--text-muted);">Nên dùng ảnh nền trong suốt PNG</span>' +
+        '</div>' +
+        '<input type="file" id="sign-image-input" accept=".png,.jpg,.jpeg,.gif,.webp" hidden>'
+      : '') +
+
+      // Page navigator + canvas (if image loaded)
+      (signImage ?
+        '<div style="margin:16px 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">' +
+          '<button class="btn btn-secondary btn-sm" id="btn-prev-page" ' + (signActivePage === 0 ? 'disabled' : '') + '>◀ Trang trước</button>' +
+          '<span style="font-size:0.85rem;color:var(--text-primary);">Trang <strong>' + (signActivePage + 1) + '</strong> / ' + pageCount + '</span>' +
+          '<button class="btn btn-secondary btn-sm" id="btn-next-page" ' + (signActivePage >= pageCount - 1 ? 'disabled' : '') + '>Trang sau ▶</button>' +
+          '<span style="font-size:0.75rem;color:var(--text-muted);margin-left:auto;">Click vào trang để đặt chữ ký</span>' +
+        '</div>' +
+        '<div class="sign-canvas-container" id="sign-canvas-container">' +
+          '<canvas id="sign-canvas"></canvas>' +
+        '</div>' +
+        // Preview of current placements
+        (signPlacements.filter(p => p.page === signActivePage).length > 0 ?
+          '<div style="margin-top:8px;font-size:0.8rem;color:var(--text-muted);">' +
+            'Đã đặt ' + signPlacements.filter(p => p.page === signActivePage).length + ' chữ ký trên trang này' +
+          '</div>' : ''
+        )
+      : '') +
+
+      '<div class="shortcut-hint">' +
+        '<span class="kbd">Ctrl</span> + <span class="kbd">S</span> Tải PDF &nbsp;|&nbsp;' +
+        '<span class="kbd">←</span><span class="kbd">→</span> Chuyển trang' +
+      '</div>'
+    ;
+
+    if (!signImage) {
+      this.setupSignUpload();
+    } else {
+      this.renderSignCanvas();
+      this.setupSignCanvasEvents();
+    }
+    this.setupSignAction();
+  }
+
+  setupSignUpload() {
+    const zone = document.getElementById('sign-upload-zone');
+    const input = document.getElementById('sign-image-input');
+    if (!zone || !input) return;
+
+    zone.addEventListener('click', () => input.click());
+    input.addEventListener('change', async (e) => {
+      if (e.target.files[0]) await this.loadSignImage(e.target.files[0]);
+    });
+    zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.style.borderColor = 'var(--accent)'; });
+    zone.addEventListener('dragleave', () => { zone.style.borderColor = ''; });
+    zone.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      zone.style.borderColor = '';
+      if (e.dataTransfer.files[0]) await this.loadSignImage(e.dataTransfer.files[0]);
+    });
+  }
+
+  async loadSignImage(file) {
+    if (!file.type.startsWith('image/')) {
+      showToast('Vui lòng chọn file ảnh', 'error');
+      return;
+    }
+    try {
+      const buf = await file.arrayBuffer();
+      this.signImage = new Uint8Array(buf);
+      // Get natural dimensions
+      const img = new Image();
+      img.src = URL.createObjectURL(new Blob([buf]));
+      await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; });
+      this.signImgNaturalWidth = img.naturalWidth;
+      this.signImgNaturalHeight = img.naturalHeight;
+      URL.revokeObjectURL(img.src);
+      this.signPlacements = [];
+      showToast('Đã tải ảnh chữ ký! Click lên trang PDF để đặt.', 'success');
+      this.renderSignMode(document.getElementById('results-area'));
+    } catch (err) {
+      console.error('Sign image load error:', err);
+      showToast('Không thể đọc file ảnh', 'error');
+    }
+  }
+
+  async renderSignCanvas() {
+    const container = document.getElementById('sign-canvas-container');
+    const canvas = document.getElementById('sign-canvas');
+    if (!canvas) return;
+
+    try {
+      const { canvas: pageCanvas, viewport } = await PDFEngine.renderPageFull(
+        this.pdfjsDoc, this.signActivePage, this.signPreviewScale
+      );
+      canvas.width = pageCanvas.width;
+      canvas.height = pageCanvas.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(pageCanvas, 0, 0);
+
+      // Draw existing placements on this page
+      const pagePlacements = this.signPlacements.filter(p => p.page === this.signActivePage);
+      for (const p of pagePlacements) {
+        ctx.strokeStyle = 'rgba(108,92,231,0.6)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 3]);
+        ctx.strokeRect(p.canvasX, p.canvasY, p.canvasW, p.canvasH);
+        ctx.setLineDash([]);
+        ctx.fillStyle = 'rgba(108,92,231,0.15)';
+        ctx.fillRect(p.canvasX, p.canvasY, p.canvasW, p.canvasH);
+      }
+    } catch (err) {
+      console.error('Sign canvas render error:', err);
+    }
+  }
+
+  setupSignCanvasEvents() {
+    const canvas = document.getElementById('sign-canvas');
+    if (!canvas) return;
+
+    canvas.addEventListener('click', (e) => {
+      if (!this.signImage) return;
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const clickX = (e.clientX - rect.left) * scaleX;
+      const clickY = (e.clientY - rect.top) * scaleY;
+
+      // Calculate sign image dimensions at preview scale
+      const pdfPage = this.pdfDoc.getPages()[this.signActivePage];
+      const { width: pdfW, height: pdfH } = pdfPage.getSize();
+      const previewW = this.signImgNaturalWidth * this.signPreviewScale * 0.3;
+      const previewH = this.signImgNaturalHeight * this.signPreviewScale * 0.3;
+
+      // Store both canvas coords (for display) and PDF coords (for stamping)
+      const canvasX = clickX - previewW / 2;
+      const canvasY = clickY - previewH / 2;
+
+      // Convert to PDF coordinates
+      const pdfX = (canvasX / canvas.width) * pdfW;
+      const pdfY = pdfH - ((canvasY + previewH) / canvas.height) * pdfH; // flip Y for PDF coords
+      const pdfWidth = (previewW / canvas.width) * pdfW;
+      const pdfHeight = (previewH / canvas.height) * pdfH;
+
+      this.signPlacements.push({
+        page: this.signActivePage,
+        x: pdfX, y: pdfY,
+        width: pdfWidth, height: pdfHeight,
+        canvasX, canvasY,
+        canvasW: previewW, canvasH: previewH
+      });
+
+      this.renderSignCanvas();
+      this.setupSignCanvasEvents();
+      this.setupSignAction();
+    });
+
+    // Page navigation
+    const prevBtn = document.getElementById('btn-prev-page');
+    const nextBtn = document.getElementById('btn-next-page');
+    if (prevBtn) prevBtn.addEventListener('click', () => {
+      if (this.signActivePage > 0) {
+        this.signActivePage--;
+        this.renderSignMode(document.getElementById('results-area'));
+      }
+    });
+    if (nextBtn) nextBtn.addEventListener('click', () => {
+      if (this.signActivePage < this.pageCount - 1) {
+        this.signActivePage++;
+        this.renderSignMode(document.getElementById('results-area'));
+      }
+    });
+  }
+
+  setupSignAction() {
+    const btn = document.getElementById('btn-sign');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      if (!this.signImage || this.signPlacements.length === 0) return;
+      btn.disabled = true;
+      btn.textContent = '⏳ Đang ký...';
+      try {
+        const pdfBytes = await PDFEngine.stampImage(
+          this.pdfDoc, this.signImage, 
+          this.signPlacements.map(p => ({ page: p.page, x: p.x, y: p.y, width: p.width, height: p.height, opacity: 0.9 }))
+        );
+        PDFEngine.download(pdfBytes, this.fileName.replace(/\.pdf$/i, '_ky.pdf'));
+        btn.textContent = '✅ Đã tải xong';
+        showToast('PDF đã được ký thành công!', 'success');
+      } catch (err) {
+        console.error('Sign error:', err);
+        showToast('Có lỗi khi ký PDF', 'error');
+      }
+      setTimeout(() => { btn.disabled = false; btn.textContent = '✍️ Ký & Tải PDF'; }, 2000);
+    });
+
+    const clearBtn = document.getElementById('btn-clear-sign');
+    if (clearBtn) clearBtn.addEventListener('click', () => {
+      this.signPlacements = [];
+      this.renderSignMode(document.getElementById('results-area'));
+    });
   }
 
   // ═══════════════════════════════════════════════════════════════
