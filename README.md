@@ -4,7 +4,7 @@ Bộ công cụ chỉnh sửa PDF miễn phí, xử lý trực tiếp trên trì
 
 🔗 **Dùng ngay:** [https://truongsonpdf24112000-glitch.github.io/pdf-tools/](https://truongsonpdf24112000-glitch.github.io/pdf-tools/)
 
-## 14 Công Cụ
+## 25 Công Cụ — 4 Nhóm
 
 ### 📑 Chỉnh sửa trang
 | # | Tool | Mô tả |
@@ -27,10 +27,25 @@ Bộ công cụ chỉnh sửa PDF miễn phí, xử lý trực tiếp trên trì
 ### ⚙️ Công cụ nâng cao
 | # | Tool | Mô tả |
 |---|------|-------|
-| 11 | 📦 Nén PDF | Giảm kích thước file PDF |
-| 12 | 🔢 Thêm số trang | Thêm số trang với nhiều tùy chọn vị trí và định dạng |
-| 13 | 🔒 Khóa/Mở khóa | Đặt mật khẩu bảo vệ hoặc mở khóa PDF |
-| 14 | 🖼️ Trích xuất ảnh | Trích xuất tất cả ảnh từ file PDF |
+| 11 | ✂️ Cắt lề | Cắt lề trang PDF — loại bỏ khoảng trắng thừa |
+| 12 | 💧 Watermark | Thêm watermark text hoặc logo vào PDF |
+| 13 | 📋 Header/Footer | Thêm đầu trang và chân trang |
+| 14 | ⬛⬜ Grayscale | Chuyển PDF màu sang trắng đen |
+| 15 | 🔨 Flatten | Làm phẳng form fields, annotations |
+| 16 | ⬛ Redact | Che nội dung nhạy cảm bằng ô đen |
+| 17 | 📦 Nén PDF | Giảm kích thước file PDF (3 mức: cao/vừa/thấp) |
+| 18 | 🔢 Thêm số trang | Thêm số trang với nhiều tùy chọn vị trí và định dạng |
+| 19 | 🔒 Khóa/Mở khóa | Đặt mật khẩu bảo vệ hoặc mở khóa PDF |
+| 20 | 🖼️ Trích xuất ảnh | Trích xuất tất cả ảnh từ file PDF |
+| 21 | ✍️ Ký & Đóng dấu | Ký tên hoặc đóng dấu lên PDF |
+
+### 🔧 Công cụ chuyên dụng
+| # | Tool | Mô tả |
+|---|------|-------|
+| 22 | 🔍 So sánh PDF | So sánh 2 file PDF — line-by-line diff, % khớp |
+| 23 | 🔢 Bates Numbering | Đánh số Bates cho tài liệu pháp lý, chứng từ |
+| 24 | 📸 Scan to PDF | Chụp ảnh tài liệu bằng camera và tạo file PDF |
+| 25 | 🔧 Sửa PDF lỗi | Sửa file PDF bị hỏng, không mở được |
 
 ## Tính Năng
 
@@ -38,8 +53,9 @@ Bộ công cụ chỉnh sửa PDF miễn phí, xử lý trực tiếp trên trì
 - ✅ Không cần cài đặt, không cần đăng ký
 - ✅ Dark mode / Light mode
 - ✅ Responsive — dùng được trên mobile
+- ✅ PWA — cài đặt như app trên desktop & mobile
 - ✅ Mã nguồn mở (MIT)
-- ✅ 14 tool, chia 3 nhóm rõ ràng
+- ✅ 25 công cụ, chia 4 nhóm rõ ràng
 
 ## Backend (Tùy chọn)
 
@@ -77,6 +93,7 @@ Nếu backend không chạy, các tool client-side vẫn hoạt động bình th
 | POST /images-to-pdf | Ảnh → PDF |
 | POST /extract-images | Trích xuất ảnh từ PDF |
 | POST /compress | Nén PDF |
+| POST /repair | Sửa PDF bị lỗi |
 
 ## Phát Triển
 
@@ -94,6 +111,7 @@ python3 -m http.server 8080
 - [Flask](https://flask.palletsprojects.com/) — backend API
 - [pikepdf](https://github.com/pikepdf/pikepdf) — nén & xử lý PDF
 - [LibreOffice](https://www.libreoffice.org/) — chuyển đổi Office
+- Service Worker API — PWA offline support
 
 ## License
 
