@@ -1,6 +1,6 @@
 // js/tools/special.js — Công cụ chuyên dụng: So sánh, Bates, Scan, Sửa lỗi
 import { PDFEngine } from '../utils/pdf-engine.js';
-import { showToast, showLoading, hideLoading, formatFileSize } from '../utils/ui-helpers.js';
+import { showToast, showLoading, hideLoading, formatFileSize, escapeHtml } from '../utils/ui-helpers.js';
 
 const MODES = [
   { id: 'compare', label: 'So sánh', icon: '🔍', desc: 'So sánh 2 file PDF, line-by-line diff, % khớp' },
@@ -173,7 +173,7 @@ class SpecialTools {
     if (!file.name.toLowerCase().endsWith('.pdf')) { showToast('Chọn file PDF', 'error'); return; }
     const zone = document.getElementById(`zone-${side}`);
     zone.className = 'upload-zone compact';
-    zone.innerHTML = `<span class="upload-icon">📄</span><div class="upload-text"><h3>${this.esc(file.name)}</h3><span class="sub">${formatFileSize(file.size)} — Đang đọc...</span></div>`;
+    zone.innerHTML = `<span class="upload-icon">📄</span><div class="upload-text"><h3>${escapeHtml(file.name)}</h3><span class="sub">${formatFileSize(file.size)} — Đang đọc...</span></div>`;
 
     try {
       const buf = await file.arrayBuffer();
@@ -276,10 +276,10 @@ class SpecialTools {
 
         <div style="display:flex;gap:12px;margin-bottom:16px;">
           <div style="flex:1;">
-            <h4 style="margin:0 0 6px;">📄 ${this.esc(a.name)} (${a.pages} trang)</h4>
+            <h4 style="margin:0 0 6px;">📄 ${escapeHtml(a.name)} (${a.pages} trang)</h4>
           </div>
           <div style="flex:1;">
-            <h4 style="margin:0 0 6px;">📄 ${this.esc(b.name)} (${b.pages} trang)</h4>
+            <h4 style="margin:0 0 6px;">📄 ${escapeHtml(b.name)} (${b.pages} trang)</h4>
           </div>
         </div>
 
@@ -288,12 +288,12 @@ class SpecialTools {
             <div class="diff-line diff-${d.type}">
               <span class="diff-num">${i+1}</span>
               <div class="diff-content">
-                <div class="diff-a">${d.a ? this.esc(d.a) : '<span style="color:var(--text-muted);">(trống)</span>'}</div>
-                <div class="diff-b">${d.b ? this.esc(d.b) : '<span style="color:var(--text-muted);">(trống)</span>'}</div>
+                <div class="diff-a">${d.a ? escapeHtml(d.a) : '<span style="color:var(--text-muted);">(trống)</span>'}</div>
+                <div class="diff-b">${d.b ? escapeHtml(d.b) : '<span style="color:var(--text-muted);">(trống)</span>'}</div>
                 ${d.charDiff ? `<div class="diff-char-detail">${d.charDiff.map(c => {
-                  if (c.type === 'same') return `<span class="dc-same">${this.esc(c.char)}</span>`;
-                  if (c.type === 'rem') return `<span class="dc-rem">${this.esc(c.char)}</span>`;
-                  return `<span class="dc-add">${this.esc(c.char)}</span>`;
+                  if (c.type === 'same') return `<span class="dc-same">${escapeHtml(c.char)}</span>`;
+                  if (c.type === 'rem') return `<span class="dc-rem">${escapeHtml(c.char)}</span>`;
+                  return `<span class="dc-add">${escapeHtml(c.char)}</span>`;
                 }).join('')}</div>` : ''}
               </div>
             </div>
@@ -359,7 +359,7 @@ class SpecialTools {
   renderBatesConfig() {
     const zone = document.getElementById('bates-upload-zone');
     zone.className = 'upload-zone compact';
-    zone.innerHTML = `<span class="upload-icon">📄</span><div class="upload-text"><h3>${this.esc(this.batesFileName)}</h3><span class="sub">${this.batesPages.length} trang</span></div><button class="change-btn" id="bates-chg-btn">Đổi file</button>`;
+    zone.innerHTML = `<span class="upload-icon">📄</span><div class="upload-text"><h3>${escapeHtml(this.batesFileName)}</h3><span class="sub">${this.batesPages.length} trang</span></div><button class="change-btn" id="bates-chg-btn">Đổi file</button>`;
     document.getElementById('bates-chg-btn').addEventListener('click', e => { e.stopPropagation(); document.getElementById('bates-file-input').click(); });
 
     const r = document.getElementById('results-area');
@@ -369,7 +369,7 @@ class SpecialTools {
         <h3 style="margin-bottom:16px;">🔢 Cấu hình Bates Numbering</h3>
 
         <div class="form-group"><label>Tiền tố (Prefix)</label>
-          <input class="form-input" id="b-prefix" value="${this.esc(this.prefix)}" placeholder="VD: EXHIBIT-, ABC-"></div>
+          <input class="form-input" id="b-prefix" value="${escapeHtml(this.prefix)}" placeholder="VD: EXHIBIT-, ABC-"></div>
 
         <div style="display:flex;gap:12px;">
           <div class="form-group" style="flex:1;"><label>Bắt đầu từ số</label>
@@ -727,7 +727,7 @@ class SpecialTools {
   renderRepairResults(issues) {
     const zone = document.getElementById('repair-upload-zone');
     zone.className = 'upload-zone compact';
-    zone.innerHTML = `<span class="upload-icon">📄</span><div class="upload-text"><h3>${this.esc(this.repairFileName)}</h3><span class="sub">${formatFileSize(this.repairFileSize)}</span></div><button class="change-btn" id="repair-chg-btn">Đổi file</button>`;
+    zone.innerHTML = `<span class="upload-icon">📄</span><div class="upload-text"><h3>${escapeHtml(this.repairFileName)}</h3><span class="sub">${formatFileSize(this.repairFileSize)}</span></div><button class="change-btn" id="repair-chg-btn">Đổi file</button>`;
     document.getElementById('repair-chg-btn').addEventListener('click', e => { e.stopPropagation(); document.getElementById('repair-file-input').click(); });
 
     const levelIcons = { error: '🔴', warning: '🟡', info: '🔵' };
@@ -739,7 +739,7 @@ class SpecialTools {
       <div class="convert-card" style="max-width:600px;">
         <div style="text-align:center;margin-bottom:24px;"><span style="font-size:3rem;">🔧</span></div>
         <h2 style="text-align:center;">Sửa PDF</h2>
-        <p style="text-align:center;color:var(--text-muted);margin-bottom:16px;">${this.esc(this.repairFileName)} · ${formatFileSize(this.repairFileSize)}</p>
+        <p style="text-align:center;color:var(--text-muted);margin-bottom:16px;">${escapeHtml(this.repairFileName)} · ${formatFileSize(this.repairFileSize)}</p>
 
         <div style="background:var(--bg-input);padding:16px;border-radius:8px;margin-bottom:16px;">
           <h4 style="margin:0 0 8px;">Kết quả phân tích:</h4>
@@ -868,11 +868,6 @@ class SpecialTools {
   //  UTILS
   // ═══════════════════════════════════════════════════════════════
 
-  esc(s) {
-    const d = document.createElement('div');
-    d.textContent = s;
-    return d.innerHTML;
-  }
 }
 
 const tool = new SpecialTools();

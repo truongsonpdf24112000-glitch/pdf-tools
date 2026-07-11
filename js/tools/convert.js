@@ -1,6 +1,6 @@
 // js/tools/convert.js — Chuyển đổi định dạng: PDF↔Office, PDF↔Ảnh, HTML→PDF
 import { PDFEngine } from '../utils/pdf-engine.js';
-import { showToast, showLoading, hideLoading, formatFileSize } from '../utils/ui-helpers.js';
+import { showToast, showLoading, hideLoading, formatFileSize, escapeHtml } from '../utils/ui-helpers.js';
 import { getBackendUrl } from '../utils/config.js';
 
 const MODES = [
@@ -187,7 +187,7 @@ class PDFConvertTool {
         ${this.batchFiles.map((f, i) => `
           <div class="batch-file-item">
             <span class="file-icon">📄</span>
-            <span class="file-name">${this.escapeHtml(f.name)}</span>
+            <span class="file-name">${escapeHtml(f.name)}</span>
             <span class="file-size">${formatFileSize(f.size)}</span>
             <button class="remove-btn" data-idx="${i}" title="Xóa">×</button>
           </div>
@@ -291,12 +291,6 @@ class PDFConvertTool {
     return URL.createObjectURL(new Blob([''])); // fallback
   }
 
-  escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-  }
-
   async checkBackend(container) {
     try {
       const resp = await fetch(`${this.backendUrl}/health`, { signal: AbortSignal.timeout(2000) });
@@ -323,7 +317,7 @@ class PDFConvertTool {
       <h3>${title}</h3>
       <p class="sub">${sub}</p>
       ${this.fileName && this.mode !== 'jpg-to-pdf' && this.mode !== 'html-to-pdf' ?
-        `<p class="file-info">Đã chọn: ${this.escapeHtml(this.fileName)}</p>` : ''}
+        `<p class="file-info">Đã chọn: ${escapeHtml(this.fileName)}</p>` : ''}
     `;
     return zone;
   }
@@ -373,7 +367,7 @@ class PDFConvertTool {
     zone.innerHTML = `
       <span class="upload-icon">📄</span>
       <div class="upload-text">
-        <h3>${this.escapeHtml(this.fileName)}</h3>
+        <h3>${escapeHtml(this.fileName)}</h3>
         <span class="sub">${formatFileSize(this.fileSize)} · ${this.pageCount} trang</span>
       </div>
       <button class="change-btn" id="change-file-btn">Đổi file</button>
@@ -389,7 +383,7 @@ class PDFConvertTool {
         <div style="text-align:center;margin-bottom:24px;"><span style="font-size:3rem;">📄➡️</span></div>
         <h2 style="text-align:center;margin-bottom:8px;">Chọn định dạng đầu ra</h2>
         <p style="text-align:center;color:var(--text-muted);margin-bottom:24px;">
-          Chuyển ${this.escapeHtml(this.fileName)} sang định dạng văn phòng
+          Chuyển ${escapeHtml(this.fileName)} sang định dạng văn phòng
         </p>
         <div class="convert-options">
           <button class="convert-option active" data-format="word">
@@ -469,7 +463,7 @@ class PDFConvertTool {
     zone.innerHTML = `
       <span class="upload-icon">${iconMap[ext]||'📄'}</span>
       <div class="upload-text">
-        <h3>${this.escapeHtml(this.fileName)}</h3><span class="sub">${formatFileSize(this.fileSize)}</span>
+        <h3>${escapeHtml(this.fileName)}</h3><span class="sub">${formatFileSize(this.fileSize)}</span>
       </div>
       <button class="change-btn" id="change-file-btn">Đổi file</button>
     `;
@@ -483,7 +477,7 @@ class PDFConvertTool {
     results.innerHTML = `
       <div class="convert-card">
         <div style="text-align:center;margin-bottom:24px;"><span style="font-size:3rem;">${iconMap[ext]}➡️📄</span></div>
-        <h2 style="text-align:center;margin-bottom:8px;">${this.escapeHtml(this.fileName)}</h2>
+        <h2 style="text-align:center;margin-bottom:8px;">${escapeHtml(this.fileName)}</h2>
         <p style="text-align:center;color:var(--text-muted);margin-bottom:4px;">${typeNames[ext]} · ${formatFileSize(this.fileSize)}</p>
         <p style="text-align:center;color:var(--text-muted);margin-bottom:24px;">Sẽ được chuyển đổi sang PDF</p>
         <button class="btn btn-primary" id="btn-convert" style="width:100%;padding:14px;font-size:1rem;">🔄 Chuyển đổi sang PDF</button>
@@ -556,7 +550,7 @@ class PDFConvertTool {
     zone.innerHTML = `
       <span class="upload-icon">📄</span>
       <div class="upload-text">
-        <h3>${this.escapeHtml(this.fileName)}</h3><span class="sub">${this.pageCount} trang</span>
+        <h3>${escapeHtml(this.fileName)}</h3><span class="sub">${this.pageCount} trang</span>
       </div>
       <button class="change-btn" id="change-file-btn">Đổi file</button>
     `;
@@ -741,9 +735,9 @@ class PDFConvertTool {
       <div class="thumbnail-grid" id="thumbnail-grid" style="grid-template-columns: repeat(${cols}, 1fr);">
         ${files.map((f, i) => `
           <div class="thumbnail-card" data-index="${i}" style="cursor:grab;">
-            <img src="${f.dataUrl}" alt="${this.escapeHtml(f.name)}" loading="lazy">
+            <img src="${f.dataUrl}" alt="${escapeHtml(f.name)}" loading="lazy">
             <span class="page-number">${i+1}</span>
-            <span style="display:block;font-size:0.7rem;color:var(--text-muted);padding:4px;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${this.escapeHtml(f.name)}</span>
+            <span style="display:block;font-size:0.7rem;color:var(--text-muted);padding:4px;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${escapeHtml(f.name)}</span>
           </div>
         `).join('')}
         ${files.length > 1 ? '<p style="grid-column:1/-1;font-size:0.75rem;color:var(--text-muted);text-align:center;">↕️ Kéo thả để đổi thứ tự trang</p>' : ''}
@@ -905,7 +899,7 @@ class PDFConvertTool {
     zone.innerHTML = `
       <span class="upload-icon">📁</span>
       <div class="upload-text">
-        <h3>${this.escapeHtml(file.name)}</h3><span class="sub">${formatFileSize(file.size)} — sẵn sàng</span>
+        <h3>${escapeHtml(file.name)}</h3><span class="sub">${formatFileSize(file.size)} — sẵn sàng</span>
       </div>
       <button class="change-btn" id="change-file-btn">Đổi file</button>
     `;
