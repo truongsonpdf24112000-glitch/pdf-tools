@@ -395,11 +395,11 @@ class PDFConvertTool {
           <button class="convert-option active" data-format="word">
             <span class="c-icon">📝</span><span class="c-label">Word (.docx)</span><span class="c-desc">Tài liệu có thể chỉnh sửa</span>
           </button>
-          <button class="convert-option" data-format="excel">
-            <span class="c-icon">📊</span><span class="c-label">Excel (.xlsx)</span><span class="c-desc">Bảng tính, dữ liệu</span>
+          <button class="convert-option disabled-option" data-format="excel" disabled title="Đang phát triển">
+            <span class="c-icon">📊</span><span class="c-label">Excel (.xlsx)</span><span class="c-desc">Đang phát triển</span>
           </button>
-          <button class="convert-option" data-format="ppt">
-            <span class="c-icon">📽️</span><span class="c-label">PowerPoint (.pptx)</span><span class="c-desc">Bài thuyết trình</span>
+          <button class="convert-option disabled-option" data-format="ppt" disabled title="Đang phát triển">
+            <span class="c-icon">📽️</span><span class="c-label">PowerPoint (.pptx)</span><span class="c-desc">Đang phát triển</span>
           </button>
         </div>
         <button class="btn btn-primary" id="btn-convert" style="width:100%;padding:14px;margin-top:20px;font-size:1rem;">

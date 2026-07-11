@@ -1,11 +1,15 @@
-// js/app.js — App shell: sidebar, routing, theme toggle
+// js/app.js — App shell: sidebar, routing, theme toggle, lazy-loading tools
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
 
-import editTool from './tools/edit.js';
-import convertTool from './tools/convert.js';
-import advancedTool from './tools/advanced.js';
-import specialTool from './tools/special.js';
+// Dynamic imports — tools are loaded only when first used
+const toolLoaders = {
+  edit:    () => import('./tools/edit.js'),
+  convert: () => import('./tools/convert.js'),
+  advanced:() => import('./tools/advanced.js'),
+  special: () => import('./tools/special.js'),
+};
+const toolMap = {}; // populated lazily
 
 const TOOLS = [
   { id: 'edit', name: 'Chỉnh sửa PDF', icon: '📑', status: 'active', group: 'edit',
@@ -20,13 +24,6 @@ const TOOLS = [
   { id: 'special', name: 'Công cụ chuyên dụng', icon: '🔧', status: 'active', group: 'special',
     desc: 'So sánh PDF, Bates Numbering, Scan to PDF, Sửa PDF lỗi' },
 ];
-
-const toolMap = {
-  edit: editTool,
-  convert: convertTool,
-  advanced: advancedTool,
-  special: specialTool,
-};
 
 const GROUP_LABELS = {
   edit: '📑 Chỉnh sửa PDF',
@@ -63,7 +60,7 @@ function renderSidebar(activeId) {
     </div>
     <nav class="tool-nav">${nav}</nav>
     <div class="sidebar-footer">
-      <span style="font-size:0.7rem;color:var(--text-muted);">v5.1.0 · 4 tools</span>
+      <span style="font-size:0.7rem;color:var(--text-muted);">v5.1.0 · 25 tools</span>
       <button class="theme-toggle" id="theme-toggle" title="Đổi giao diện">🌙</button>
     </div>`;
 
@@ -88,9 +85,16 @@ function updateThemeIcon() {
   if (b) b.textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? '🌙' : '☀️';
 }
 
-function activateTool(id) {
+async function activateTool(id) {
   document.querySelectorAll('.tool-item').forEach(i => i.classList.toggle('active', i.dataset.tool === id));
   window.location.hash = id;
+
+  // Lazy-load tool module on first use
+  if (!toolMap[id] && toolLoaders[id]) {
+    const mod = await toolLoaders[id]();
+    toolMap[id] = mod.default;
+  }
+
   const t = toolMap[id];
   if (t) t.init();
   document.getElementById('sidebar')?.classList.remove('open');
@@ -106,14 +110,17 @@ function setupMobile() {
   o.addEventListener('click', () => { document.getElementById('sidebar').classList.remove('open'); o.classList.remove('open'); });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   document.documentElement.setAttribute('data-theme', localStorage.getItem('pdf-tools-theme') || 'dark');
   const h = window.location.hash.replace('#', '');
   renderSidebar(h || 'home');
   setupMobile();
   setupKeyboardShortcuts();
-  if (toolMap[h]) activateTool(h); else showHome();
-  window.addEventListener('hashchange', () => { const nh = window.location.hash.replace('#',''); if (toolMap[nh]) activateTool(nh); else showHome(); });
+  if (toolLoaders[h]) await activateTool(h); else showHome();
+  window.addEventListener('hashchange', async () => {
+    const nh = window.location.hash.replace('#','');
+    if (toolLoaders[nh]) await activateTool(nh); else showHome();
+  });
 });
 
 // Show home/landing page when no tool selected
@@ -127,7 +134,7 @@ function showHome() {
       <p class="hero-sub">4 nhóm công cụ — miễn phí, không cần cài đặt, không cần upload</p>
       <p class="hero-desc">Xử lý <strong>100% trên trình duyệt</strong>. File của bạn <strong>không bao giờ rời khỏi máy</strong>.</p>
       <div class="hero-stats">
-        <div class="hero-stat"><strong>4</strong><span>nhóm công cụ</span></div>
+        <div class="hero-stat"><strong>25</strong><span>công cụ</span></div>
         <div class="hero-stat"><strong>0₫</strong><span>miễn phí</span></div>
         <div class="hero-stat"><strong>100%</strong><span>bảo mật</span></div>
       </div>

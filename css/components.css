@@ -1030,6 +1030,13 @@
   color: var(--text-muted);
 }
 
+.convert-option.disabled-option {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+  border-style: dashed;
+}
+
 /* ===== Mode Tabs (HTML→PDF) ===== */
 .mode-tabs {
   display: flex;
