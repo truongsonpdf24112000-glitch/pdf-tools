@@ -4,7 +4,7 @@ Backend API cho Chỉnh Sửa PDF — Convert + Compress + Image
 Chạy: backend/.venv/bin/python3 backend/server.py
 Cổng mặc định: 5001
 
-SECURITY: v4.1.1 — đã fix toàn bộ lỗ hổng pentest 2026-06-15
+SECURITY: v5.1.0 — đã fix toàn bộ lỗ hổng pentest 2026-06-15
 """
 
 import os
@@ -16,6 +16,10 @@ import shutil
 import tempfile
 import subprocess
 import zipfile
+import logging
+import threading
+import gc
+import glob
 from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
@@ -23,6 +27,16 @@ from functools import wraps
 
 from flask import Flask, request, jsonify, send_file, Response
 from flask_cors import CORS
+
+# ============================================================
+# LOGGING CONFIG
+# ============================================================
+logger = logging.getLogger(__name__)
+LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO').upper()
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format='%(asctime)s [%(levelname)s] %(message)s'
+)
 
 # ============================================================
 # APP CONFIG
@@ -55,6 +69,19 @@ app.config['SERVER_NAME'] = None  # Không tự động set
 # RATE LIMITER — In-memory (không cần Redis)
 # ============================================================
 _rate_limit_store = defaultdict(list)
+_rate_limit_lock = threading.Lock()
+
+def _cleanup_rate_limit_store(max_keys=1000):
+    """Background cleanup: if store exceeds max_keys, remove stale entries."""
+    now = time.time()
+    with _rate_limit_lock:
+        if len(_rate_limit_store) <= max_keys:
+            return
+        for key in list(_rate_limit_store.keys()):
+            _rate_limit_store[key] = [t for t in _rate_limit_store[key] if now - t < 60]
+            if not _rate_limit_store[key]:
+                del _rate_limit_store[key]
+    logger.info(f'Rate limit store cleaned (keys: {len(_rate_limit_store)})')
 
 def rate_limit(max_requests=30, window=60):
     """Giới hạn số request trong khoảng thời gian window (giây)."""
@@ -66,11 +93,15 @@ def rate_limit(max_requests=30, window=60):
             endpoint = request.endpoint or 'unknown'
             key = f'{ip}:{endpoint}'
             now = time.time()
-            # Dọn các timestamp cũ
-            _rate_limit_store[key] = [t for t in _rate_limit_store[key] if now - t < window]
-            if len(_rate_limit_store[key]) >= max_requests:
-                return jsonify({'error': 'Quá nhiều request. Vui lòng thử lại sau.'}), 429
-            _rate_limit_store[key].append(now)
+            with _rate_limit_lock:
+                # Dọn các timestamp cũ
+                _rate_limit_store[key] = [t for t in _rate_limit_store[key] if now - t < window]
+                if len(_rate_limit_store[key]) >= max_requests:
+                    return jsonify({'error': 'Quá nhiều request. Vui lòng thử lại sau.'}), 429
+                _rate_limit_store[key].append(now)
+                # Trigger cleanup if too many keys
+                if len(_rate_limit_store) > 2000:
+                    _cleanup_rate_limit_store()
             return f(*args, **kwargs)
         return wrapped
     return decorator
@@ -84,15 +115,16 @@ def add_security_headers(response):
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
     response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
     # CSP: chỉ cho phép self và unpkg CDN (cho frontend)
     response.headers['Content-Security-Policy'] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://unpkg.com https://www.googletagmanager.com; "
+        "script-src 'self' 'unsafe-eval' https://unpkg.com https://www.googletagmanager.com; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data:; "
-        "connect-src 'self' http://localhost:* https://pdf-tools-backend.onrender.com; "
+        "connect-src 'self' http://localhost:5001 http://localhost:8080 http://localhost:3000 https://pdf-tools-backend.onrender.com; "
         "frame-ancestors 'none'"
     )
     # Ẩn Server header
@@ -116,12 +148,12 @@ def check_csrf():
     if origin:
         allowed = any(origin == o or origin.startswith(o + '/') for o in ALLOWED_ORIGINS)
         if not allowed:
-            print(f'[SECURITY] Blocked request from origin: {origin}')
+            logger.warning(f'Blocked request from origin: {origin}')
             return jsonify({'error': 'Origin không được phép'}), 403
     if referer:
         allowed = any(referer.startswith(o) for o in ALLOWED_ORIGINS)
         if not allowed and not origin:
-            print(f'[SECURITY] Blocked request from suspicious Referer: {referer}')
+            logger.warning(f'Blocked request from suspicious Referer: {referer}')
             return jsonify({'error': 'Referer không được phép'}), 403
     return None
 
@@ -131,7 +163,22 @@ def check_csrf():
 # Whitelist các loại file được chấp nhận
 ALLOWED_EXTENSIONS = {
     '.pdf', '.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt', '.html', '.htm',
-    '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg',
+    '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp',
+}
+
+# Magic bytes for file type validation
+MAGIC_BYTES = {
+    b'%PDF': '.pdf',
+    b'PK\\x03\\x04': '.docx',  # ZIP-based Office formats
+    b'\\xd0\\xcf\\x11\\xe0': '.doc',   # OLE2 (legacy Office)
+    b'\\xff\\xd8\\xff': '.jpg',
+    b'\\x89PNG\\r\\n': '.png',
+    b'GIF8': '.gif',
+    b'BM': '.bmp',
+    b'RIFF': '.webp',
+    b'<html': '.html',
+    b'<!DOC': '.html',
+    b'<HTML': '.html',
 }
 
 def validate_uploaded_file(file, allowed_exts=None):
@@ -163,7 +210,20 @@ def validate_uploaded_file(file, allowed_exts=None):
     if len(filename) > 255:
         return False, 'Tên file quá dài (tối đa 255 ký tự)'
 
-    return True, None
+    # Magic byte validation — đọc 4-8 bytes đầu để xác thực
+    try:
+        file.seek(0)
+        header = file.read(8)
+        file.seek(0)  # Reset về đầu cho caller
+        for magic, expected_ext in MAGIC_BYTES.items():
+            if header.startswith(magic):
+                return True, None
+        # Nếu không match magic bytes nào → từ chối
+        logger.warning(f'Magic byte mismatch for {filename} (ext={ext}, header={header[:8].hex()})')
+        return False, f'Định dạng file không hợp lệ (không khớp magic bytes): {ext}'
+    except Exception:
+        file.seek(0)  # Reset file pointer
+        return False, 'Không thể đọc file để xác thực'
 
 # ============================================================
 # ERROR HANDLING — không leak internal info
@@ -172,7 +232,7 @@ def safe_error(e, default_msg='Lỗi xử lý file. Vui lòng thử lại với 
     """Trả về error message an toàn, không leak internal info."""
     # Log lỗi thật ra console (chỉ admin thấy)
     import traceback
-    print(f'[ERROR] {traceback.format_exc()}')
+    logger.error(f'{traceback.format_exc()}')
     # Trả về message an toàn cho client
     return jsonify({'error': default_msg}), 500
 
@@ -182,6 +242,20 @@ def safe_error(e, default_msg='Lỗi xử lý file. Vui lòng thử lại với 
 BACKEND_DIR = Path(__file__).parent
 UPLOAD_DIR = BACKEND_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
+
+# ============================================================
+# STARTUP CLEANUP — xóa temp dirs cũ từ lần chạy trước
+# ============================================================
+_temp_cleaned = 0
+for _tmp_dir in glob.glob(str(UPLOAD_DIR / 'tmp*')):
+    try:
+        shutil.rmtree(_tmp_dir, ignore_errors=True)
+        _temp_cleaned += 1
+    except Exception:
+        pass
+if _temp_cleaned > 0:
+    logger.info(f'Cleaned up {_temp_cleaned} old temp directories in uploads/')
+gc.collect()
 
 # ============================================================
 # ROOT — Trang chào mừng khi truy cập từ browser
@@ -213,7 +287,7 @@ def index():
 <body>
   <div class="card">
     <h1>📄 Chỉnh Sửa PDF</h1>
-    <div class="ver">Backend API v4.1.1</div>
+    <div class="ver">Backend API v5.1.0</div>
     <div class="status"><span class="dot"></span> Server đang chạy</div>
     <div class="links">
       <a href="/health">📊 Health Check</a>
@@ -309,11 +383,6 @@ def convert():
 
     work_dir = Path(tempfile.mkdtemp(dir=UPLOAD_DIR))
 
-    # PDF → Office: LibreOffice doesn't support PDF import.
-    # Only Word is special-cased below
-    if conv_type.startswith('pdf-to-') and conv_type != 'pdf-to-word':
-        pass
-
     # For PDF→Word, extract text and create simple DOCX
     if conv_type == 'pdf-to-word':
         try:
@@ -349,7 +418,7 @@ def convert():
             )
             if result.returncode != 0:
                 # Không leak stderr ra client
-                print(f'[ERROR] LibreOffice conversion failed: {result.stderr[:300]}')
+                logger.error(f'LibreOffice conversion failed: {result.stderr[:300]}')
                 return jsonify({'error': 'Chuyển đổi thất bại. File có thể bị lỗi hoặc không đúng định dạng.'}), 500
 
             # Find output file
@@ -626,8 +695,7 @@ def _images_to_pdf_bytes(files):
 
         # Create a PDF page with this image
         temp_pdf = io.BytesIO()
-        img_pdf = img.convert('RGB')
-        img_pdf.save(temp_pdf, format='PDF')
+        img.save(temp_pdf, format='PDF')
         temp_pdf.seek(0)
 
         # Copy pages from temp into main doc
@@ -744,7 +812,7 @@ def compress():
         pdf.close()
 
         compressed_size = len(output.getvalue())
-        print(f'Compressed: {original_size} → {compressed_size} '
+        logger.info(f'Compressed: {original_size} → {compressed_size} '
               f'({(1-compressed_size/original_size)*100:.1f}%, quality={quality})')
 
         output.seek(0)
@@ -827,16 +895,16 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
     debug = os.environ.get('FLASK_DEBUG') == '1'
 
-    print('🔒 PDF Tools Backend v4.1.1 (Security Hardened)')
-    print(f'   Port:        {port}')
-    print(f'   Debug:       {debug} (OFF by default)')
-    print(f'   Debug Console: DISABLED')
-    print(f'   CORS:        Restricted to GitHub Pages + localhost')
-    print(f'   Max Upload:  50MB')
-    print(f'   Rate Limit:  20 req/min per IP (convert/compress)')
-    print(f'   Health:      http://0.0.0.0:{port}/health')
-    print(f'')
-    print(f'   Supported conversions:')
+    logger.info('PDF Tools Backend v5.1.0 (Security Hardened)')
+    logger.info(f'   Port:        {port}')
+    logger.info(f'   Debug:       {debug} (OFF by default)')
+    logger.info(f'   Debug Console: DISABLED')
+    logger.info(f'   CORS:        Restricted to GitHub Pages + localhost')
+    logger.info(f'   Max Upload:  50MB')
+    logger.info(f'   Rate Limit:  20 req/min per IP (convert/compress)')
+    logger.info(f'   Health:      http://0.0.0.0:{port}/health')
+    logger.info(f'')
+    logger.info(f'   Supported conversions:')
     for k, v in FORMAT_MAP.items():
-        print(f'     {k:20s} → {v["ext"]} ({v["mime"]})')
+        logger.info(f'     {k:20s} → {v["ext"]} ({v["mime"]})')
     app.run(host='0.0.0.0', port=port, debug=debug)
