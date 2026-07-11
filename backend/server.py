@@ -103,23 +103,27 @@ def add_security_headers(response):
 # CSRF / ORIGIN CHECK
 # ============================================================
 def check_csrf():
-    """Kiểm tra Origin/Referer header cho các request POST quan trọng."""
+    """Kiểm tra Origin/Referer header cho các request POST quan trọng.
+    Trả về (response, status_code) nếu bị chặn, None nếu OK.
+    Caller phải kiểm tra: if csrf_err := check_csrf(): return csrf_err
+    """
     if request.method != 'POST':
-        return
+        return None
     origin = request.headers.get('Origin', '')
     referer = request.headers.get('Referer', '')
     # Nếu không có Origin hoặc Referer → có thể là API call trực tiếp (chấp nhận)
-    # Nếu có → phải match allowed origins
+    # Nếu có → phải match allowed origins, nếu không → chặn
     if origin:
-        allowed = any(origin.startswith(o) for o in ALLOWED_ORIGINS)
+        allowed = any(origin == o or origin.startswith(o + '/') for o in ALLOWED_ORIGINS)
         if not allowed:
-            # Log suspicious origin
             print(f'[SECURITY] Blocked request from origin: {origin}')
-            # Vẫn cho qua nhưng log lại (API có thể được gọi từ tool khác)
+            return jsonify({'error': 'Origin không được phép'}), 403
     if referer:
         allowed = any(referer.startswith(o) for o in ALLOWED_ORIGINS)
         if not allowed and not origin:
-            print(f'[SECURITY] Suspicious Referer: {referer}')
+            print(f'[SECURITY] Blocked request from suspicious Referer: {referer}')
+            return jsonify({'error': 'Referer không được phép'}), 403
+    return None
 
 # ============================================================
 # FILE VALIDATION
@@ -279,7 +283,7 @@ ALLOWED_CONVERT_INPUT = {
 @rate_limit(max_requests=20, window=60)
 def convert():
     """Universal convert endpoint. Use query param ?type=<conversion-type>"""
-    check_csrf()
+    if csrf_err := check_csrf(): return csrf_err
     conv_type = request.args.get('type', '')
 
     # Auto-detect from file extension if no type given
@@ -484,7 +488,7 @@ def _xml_escape(text):
 @rate_limit(max_requests=20, window=60)
 def pdf_to_images():
     """Convert PDF pages to JPG/PNG images. Returns ZIP of all pages."""
-    check_csrf()
+    if csrf_err := check_csrf(): return csrf_err
 
     if 'file' not in request.files:
         return jsonify({'error': 'Vui lòng chọn file PDF'}), 400
@@ -585,7 +589,7 @@ def _pdf_to_images_pikepdf(pdf_path):
 @rate_limit(max_requests=20, window=60)
 def images_to_pdf():
     """Convert images (JPG/PNG) to PDF. Accepts multiple files."""
-    check_csrf()
+    if csrf_err := check_csrf(): return csrf_err
 
     files = request.files.getlist('files')
     if not files:
@@ -642,7 +646,7 @@ def _images_to_pdf_bytes(files):
 @rate_limit(max_requests=20, window=60)
 def extract_images():
     """Extract all embedded images from a PDF. Returns ZIP."""
-    check_csrf()
+    if csrf_err := check_csrf(): return csrf_err
 
     if 'file' not in request.files:
         return jsonify({'error': 'Vui lòng chọn file PDF'}), 400
@@ -702,7 +706,7 @@ QUALITY_SETTINGS = {
 @app.route('/compress', methods=['POST'])
 @rate_limit(max_requests=20, window=60)
 def compress():
-    check_csrf()
+    if csrf_err := check_csrf(): return csrf_err
 
     if 'file' not in request.files:
         return jsonify({'error': 'Vui lòng chọn file PDF'}), 400
@@ -761,7 +765,7 @@ def compress():
 @rate_limit(max_requests=20, window=60)
 def repair_pdf():
     """Repair corrupted PDF using pikepdf"""
-    check_csrf()
+    if csrf_err := check_csrf(): return csrf_err
 
     if 'file' not in request.files:
         return jsonify({'error': 'Vui lòng chọn file PDF'}), 400
