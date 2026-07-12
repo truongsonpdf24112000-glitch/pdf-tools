@@ -379,6 +379,169 @@
   background: rgba(255,71,87,0.1);
 }
 
+/* ===== Merge File Cards (v5.2) ===== */
+.merge-file-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  transition: border-color var(--transition);
+}
+
+.merge-file-card:hover {
+  border-color: var(--accent);
+}
+
+.merge-file-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.merge-file-header .file-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.merge-file-header .file-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.merge-file-header .file-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.merge-select-count {
+  font-weight: 600;
+}
+
+.btn-toggle-pages {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition);
+}
+
+.btn-toggle-pages:hover {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.merge-page-strip {
+  display: none;
+  border-top: 1px solid var(--border);
+  padding: 12px 14px;
+  background: var(--bg);
+}
+
+.merge-page-strip.expanded {
+  display: block;
+}
+
+.merge-page-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.merge-page-thumb {
+  position: relative;
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all var(--transition);
+  width: 90px;
+  background: var(--bg-card);
+}
+
+.merge-page-thumb:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.merge-page-thumb.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.merge-page-thumb canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.merge-page-num {
+  display: block;
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  padding: 2px 0;
+  background: rgba(0,0,0,0.3);
+}
+
+.merge-page-check {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+
+.merge-page-thumb.selected .merge-page-check {
+  opacity: 1;
+}
+
+.merge-page-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.merge-loading {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  padding: 16px;
+}
+
+.merge-selection-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 12px;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
 /* ===== Selectable Thumbnails (Split Tool) ===== */
 .thumbnail-card.selectable {
   cursor: pointer;
@@ -457,6 +620,49 @@
 
 .thumbnail-card.selectable:hover .delete-overlay {
   opacity: 1;
+}
+
+/* ===== Range Select Bar ===== */
+.range-select-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  margin-bottom: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  flex-wrap: wrap;
+}
+
+.range-select-bar .range-label {
+  font-weight: 600;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.range-select-bar input[type="text"] {
+  flex: 1;
+  min-width: 180px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-family: monospace;
+}
+
+.range-select-bar input[type="text"]:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.range-select-bar .range-hint {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 /* ===== Rotate Controls ===== */

@@ -1,5 +1,22 @@
 # Changelog — pdf-tools nâng cấp
 
+## 2026-07-12 — UX Upgrade: Delete & Merge
+
+### 🟢 DELETE MODE — Xóa trang mượt mà
+- **Incremental selection** — click không render lại toàn bộ UI, chỉ toggle CSS class + counter → mượt hơn hẳn
+- **Range input** — nhập `1-5, 8, 10-12` để chọn nhanh nhiều trang, hỗ trợ Enter
+- **Shift+click** — giữ Shift + click để chọn dải trang liên tiếp
+
+### 🟢 MERGE MODE — Trộn PDF trực quan
+- **Thumbnail preview** — mỗi file hiển thị thumbnail các trang, dễ hình dung
+- **Chọn trang theo file** — click vào thumbnail để chọn/bỏ chọn trang cụ thể từ mỗi file trước khi trộn
+- **Expand/Collapse** — nút "Mở tất cả" / "Thu tất cả" + toggle từng file
+- **Chọn tất cả / Bỏ chọn** — nút nhanh cho từng file
+- **Merge với selection** — chỉ trộn những trang đã chọn, hiển thị badge đếm số trang
+
+### 📊 Version
+- v5.1.0 → v5.2.0
+
 ## 2026-07-11 — Code Review & Security Hardening
 
 ### 🔴 CRITICAL (P0)

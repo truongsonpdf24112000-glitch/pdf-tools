@@ -664,13 +664,21 @@ class PDFEditTool {
     results.innerHTML = `
       <div class="toolbar">
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-          <span class="page-count">📑 Còn lại <strong>${remaining}</strong> / ${pages.length} trang</span>
+          <span class="page-count">📑 Còn lại <strong id="delete-remaining">${remaining}</strong> / ${pages.length} trang</span>
           <button class="btn btn-secondary btn-sm" id="btn-select-all">Chọn tất cả</button>
           <button class="btn btn-secondary btn-sm" id="btn-deselect-all">Bỏ chọn</button>
         </div>
         <button class="btn btn-primary" id="btn-action" ${deletedPages.size === 0 ? 'disabled' : ''}>
-          🗑️ Xóa trang đã chọn (${deletedPages.size})
+          🗑️ Xóa <span id="delete-count">${deletedPages.size}</span> trang
         </button>
+      </div>
+      <div class="range-select-bar">
+        <span class="range-label">🎯 Chọn nhanh:</span>
+        <input type="text" id="range-input"
+               placeholder="vd: 1-5, 8, 10-12"
+               title="Nhập dải trang: số lẻ (1,3,5) hoặc khoảng (1-5). Giữ Shift+click để chọn dải.">
+        <button class="btn btn-secondary btn-sm" id="btn-apply-range">Áp dụng</button>
+        <span class="range-hint">Shift+click để chọn dải</span>
       </div>
       <div class="thumbnail-grid" id="thumbnail-grid"
            style="grid-template-columns: repeat(${cols}, 180px);">
@@ -690,39 +698,128 @@ class PDFEditTool {
 
     this.setupDeleteSelection();
     this.setupDeleteAction();
+    this.setupRangeInput();
   }
 
   setupDeleteSelection() {
-    document.querySelectorAll('.thumbnail-card.selectable').forEach(card => {
-      card.addEventListener('click', () => {
-        const idx = parseInt(card.dataset.pageIndex);
+    const grid = document.getElementById('thumbnail-grid');
+    this._deleteLastClicked = null;
+
+    grid.addEventListener('click', (e) => {
+      const card = e.target.closest('.thumbnail-card.selectable');
+      if (!card) return;
+      const idx = parseInt(card.dataset.pageIndex);
+
+      if (e.shiftKey && this._deleteLastClicked !== null) {
+        // Range select with Shift
+        const start = Math.min(this._deleteLastClicked, idx);
+        const end = Math.max(this._deleteLastClicked, idx);
+        for (let i = start; i <= end; i++) {
+          this.deletedPages.add(i);
+          const c = document.querySelector(`.thumbnail-card[data-page-index="${i}"]`);
+          if (c) c.classList.add('marked-delete');
+        }
+      } else {
+        // Toggle single page — NO RE-RENDER, just toggle CSS
         if (this.deletedPages.has(idx)) {
           this.deletedPages.delete(idx);
+          card.classList.remove('marked-delete');
         } else {
           this.deletedPages.add(idx);
+          card.classList.add('marked-delete');
         }
-        const results = document.getElementById('results-area');
-        this.renderDeleteResults(results);
-        this.setupDeleteSelection();
-        this.setupDeleteAction();
-      });
+        this._deleteLastClicked = idx;
+      }
+
+      this._updateDeleteUI();
     });
 
     document.getElementById('btn-select-all')?.addEventListener('click', () => {
       this.deletedPages = new Set(this.pages.map((_, i) => i));
-      const results = document.getElementById('results-area');
-      this.renderDeleteResults(results);
-      this.setupDeleteSelection();
-      this.setupDeleteAction();
+      document.querySelectorAll('.thumbnail-card.selectable').forEach(c => c.classList.add('marked-delete'));
+      this._updateDeleteUI();
     });
 
     document.getElementById('btn-deselect-all')?.addEventListener('click', () => {
       this.deletedPages = new Set();
-      const results = document.getElementById('results-area');
-      this.renderDeleteResults(results);
-      this.setupDeleteSelection();
-      this.setupDeleteAction();
+      document.querySelectorAll('.thumbnail-card.selectable').forEach(c => c.classList.remove('marked-delete'));
+      this._updateDeleteUI();
     });
+  }
+
+  _updateDeleteUI() {
+    // Incremental UI updates — no full re-render
+    const remaining = this.pages.length - this.deletedPages.size;
+    const remainEl = document.getElementById('delete-remaining');
+    const countEl = document.getElementById('delete-count');
+    const btn = document.getElementById('btn-action');
+
+    if (remainEl) remainEl.textContent = remaining;
+    if (countEl) countEl.textContent = this.deletedPages.size;
+    if (btn) {
+      btn.disabled = this.deletedPages.size === 0;
+      btn.innerHTML = `🗑️ Xóa <span id="delete-count">${this.deletedPages.size}</span> trang`;
+    }
+  }
+
+  setupRangeInput() {
+    document.getElementById('btn-apply-range')?.addEventListener('click', () => {
+      this._applyRangeInput();
+    });
+
+    document.getElementById('range-input')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') this._applyRangeInput();
+    });
+  }
+
+  _applyRangeInput() {
+    const input = document.getElementById('range-input');
+    if (!input || !input.value.trim()) return;
+
+    const parsed = this._parsePageRange(input.value.trim(), this.pages.length);
+    if (parsed.error) {
+      showToast(parsed.error, 'error');
+      return;
+    }
+
+    // Clear all, then select parsed
+    this.deletedPages = new Set();
+    document.querySelectorAll('.thumbnail-card.selectable').forEach(c => c.classList.remove('marked-delete'));
+
+    for (const idx of parsed.indices) {
+      this.deletedPages.add(idx);
+      const c = document.querySelector(`.thumbnail-card[data-page-index="${idx}"]`);
+      if (c) c.classList.add('marked-delete');
+    }
+
+    this._updateDeleteUI();
+    showToast(`Đã chọn ${parsed.indices.length} trang`, 'success');
+  }
+
+  _parsePageRange(text, maxPage) {
+    // Parse formats: "1-5, 8, 10-12", "1,3,5", "1-5"
+    const indices = new Set();
+    const parts = text.split(',').map(s => s.trim()).filter(Boolean);
+
+    for (const part of parts) {
+      if (part.includes('-')) {
+        const [startStr, endStr] = part.split('-').map(s => s.trim());
+        const start = parseInt(startStr);
+        const end = parseInt(endStr);
+        if (isNaN(start) || isNaN(end)) return { error: `Khoảng không hợp lệ: "${part}". Dùng dạng: 1-5` };
+        if (start < 1 || end > maxPage || start > end) {
+          return { error: `Khoảng "${part}" vượt quá số trang (1-${maxPage})` };
+        }
+        for (let i = start; i <= end; i++) indices.add(i - 1); // 1-based to 0-based
+      } else {
+        const num = parseInt(part);
+        if (isNaN(num)) return { error: `Số trang không hợp lệ: "${part}"` };
+        if (num < 1 || num > maxPage) return { error: `Trang ${num} không tồn tại (1-${maxPage})` };
+        indices.add(num - 1);
+      }
+    }
+
+    return { indices: Array.from(indices).sort((a, b) => a - b) };
   }
 
   setupDeleteAction() {
@@ -771,8 +868,17 @@ class PDFEditTool {
     try {
       for (const file of pdfFiles) {
         const buffer = await file.arrayBuffer();
-        const { pdfDoc, pageCount } = await PDFEngine.load(buffer);
-        this.mergeFiles.push({ file, pdfDoc, pageCount, name: file.name, size: file.size });
+        const result = await PDFEngine.load(buffer);
+        this.mergeFiles.push({
+          file, pdfDoc: result.pdfDoc, pdfjsDoc: result.pdfjsDoc,
+          pageCount: result.pageCount, name: file.name, size: file.size
+        });
+        // Initialize page selection: all pages selected by default
+        if (!this._mergePageSelection) this._mergePageSelection = new Map();
+        const idx = this.mergeFiles.length - 1;
+        this._mergePageSelection.set(idx, new Set(
+          Array.from({ length: result.pageCount }, (_, i) => i)
+        ));
       }
       hideLoading();
       this.renderMergeResults();
@@ -785,7 +891,6 @@ class PDFEditTool {
   }
 
   renderMergeResults() {
-    // Update upload zone
     const zone = document.getElementById('upload-zone');
     zone.className = 'upload-zone compact';
     zone.innerHTML = `
@@ -799,34 +904,150 @@ class PDFEditTool {
     const results = document.getElementById('results-area');
     results.style.display = 'block';
     const totalPages = this.mergeFiles.reduce((sum, f) => sum + f.pageCount, 0);
+    const selectedTotal = this._countSelectedMergePages();
+
+    // Show empty state hint when no files
+    if (this.mergeFiles.length === 0) {
+      results.innerHTML = `
+        <div class="toolbar">
+          <span class="page-count">📑 Chưa có file nào</span>
+          <button class="btn btn-primary" id="btn-add-more">+ Thêm file</button>
+        </div>
+      `;
+      this.setupMergeButtons();
+      return;
+    }
 
     results.innerHTML = `
-      <div class="toolbar">
-        <span class="page-count">📑 ${this.mergeFiles.length} file · ${totalPages} trang</span>
-        <div style="display:flex;gap:8px;">
+      <div class="toolbar" style="flex-wrap:wrap;gap:12px;">
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+          <span class="page-count">📑 ${this.mergeFiles.length} file · <strong id="merge-total-pages">${totalPages}</strong> trang</span>
+          ${selectedTotal !== totalPages ? `<span class="merge-selection-badge">✅ <strong>${selectedTotal}</strong> trang đã chọn</span>` : ''}
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="btn btn-secondary btn-sm" id="btn-expand-all">📋 Mở tất cả</button>
+          <button class="btn btn-secondary btn-sm" id="btn-collapse-all">📋 Thu tất cả</button>
           <button class="btn btn-secondary" id="btn-add-more">+ Thêm file</button>
-          <button class="btn btn-primary" id="btn-action" ${this.mergeFiles.length < 2 ? 'disabled' : ''}>
-            🔀 Trộn thành 1 PDF
+          <button class="btn btn-primary" id="btn-action" ${selectedTotal === 0 ? 'disabled' : ''}>
+            🔀 Trộn ${selectedTotal} trang
           </button>
         </div>
       </div>
       <div class="file-list" id="file-list">
-        ${this.mergeFiles.map((f, i) => `
-          <div class="file-list-item" data-file-index="${i}">
-            <span class="drag-handle">⠿</span>
-            <span class="file-icon">📄</span>
-            <div class="file-info">
-              <span class="file-name">${escapeHtml(f.name)}</span>
-              <span class="file-meta">${formatFileSize(f.size)} · ${f.pageCount} trang</span>
-            </div>
-            <button class="btn-remove" data-remove="${i}" title="Xóa">×</button>
-          </div>
-        `).join('')}
+        ${this.mergeFiles.map((f, i) => this._renderMergeFileCard(f, i)).join('')}
       </div>
     `;
 
     this.setupMergeSortable();
     this.setupMergeButtons();
+    // Render thumbnails for each expanded card
+    this._renderMergeThumbnails();
+  }
+
+  _renderMergeFileCard(f, idx) {
+    const selected = this._mergePageSelection?.get(idx) || new Set();
+    const selectedCount = selected.size;
+    const allSelected = selectedCount === f.pageCount;
+    const isExpanded = this._mergeExpandedFiles?.has(idx);
+
+    return `
+      <div class="merge-file-card" data-file-index="${idx}">
+        <div class="merge-file-header">
+          <span class="drag-handle" title="Kéo để sắp xếp">⠿</span>
+          <span class="file-icon">📄</span>
+          <div class="file-info">
+            <span class="file-name">${escapeHtml(f.name)}</span>
+            <span class="file-meta">
+              ${formatFileSize(f.size)} · ${f.pageCount} trang
+              · <span class="merge-select-count" id="merge-sel-${idx}">
+                ${allSelected ? '✅ Tất cả' : `⚠️ ${selectedCount}/${f.pageCount}`}
+              </span>
+            </span>
+          </div>
+          <button class="btn-toggle-pages" data-file="${idx}" title="${isExpanded ? 'Thu gọn' : 'Chọn trang'}">
+            ${isExpanded ? '▲ Thu gọn' : '📋 Chọn trang'}
+          </button>
+          <button class="btn-remove" data-remove="${idx}" title="Xóa file">×</button>
+        </div>
+        <div class="merge-page-strip ${isExpanded ? 'expanded' : ''}" id="merge-strip-${idx}">
+          <div class="merge-page-grid" id="merge-pages-${idx}">
+            <span class="merge-loading">⏳ Đang tải thumbnail...</span>
+          </div>
+          <div class="merge-page-actions">
+            <button class="btn btn-secondary btn-sm" data-select-all="${idx}">✅ Chọn tất cả</button>
+            <button class="btn btn-secondary btn-sm" data-deselect-all="${idx}">☐ Bỏ chọn</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  _countSelectedMergePages() {
+    if (!this._mergePageSelection) return 0;
+    let count = 0;
+    for (const [, pages] of this._mergePageSelection) {
+      count += pages.size;
+    }
+    return count;
+  }
+
+  async _renderMergeThumbnails() {
+    // Only render for expanded files
+    if (!this._mergeExpandedFiles) return;
+
+    for (const idx of this._mergeExpandedFiles) {
+      const f = this.mergeFiles[idx];
+      if (!f || !f.pdfjsDoc) continue;
+
+      const grid = document.getElementById(`merge-pages-${idx}`);
+      if (!grid) continue;
+
+      // Skip if already rendered
+      if (grid.querySelector('.merge-page-thumb')) continue;
+
+      const selected = this._mergePageSelection?.get(idx) || new Set();
+      const scale = f.pageCount > 20 ? 0.15 : 0.25;
+
+      grid.innerHTML = '';
+      for (let i = 0; i < f.pageCount; i++) {
+        const thumbDiv = document.createElement('div');
+        thumbDiv.className = `merge-page-thumb ${selected.has(i) ? 'selected' : ''}`;
+        thumbDiv.dataset.fileIdx = idx;
+        thumbDiv.dataset.pageIdx = i;
+        thumbDiv.title = `Trang ${i + 1}`;
+        thumbDiv.innerHTML = `
+          <canvas class="merge-thumb-canvas" id="mtc-${idx}-${i}"></canvas>
+          <span class="merge-page-num">${i + 1}</span>
+          <div class="merge-page-check">✓</div>
+        `;
+        grid.appendChild(thumbDiv);
+      }
+
+      // Render canvases (async, chunked)
+      this._renderThumbCanvases(f.pdfjsDoc, idx, 0, f.pageCount, scale);
+    }
+  }
+
+  async _renderThumbCanvases(pdfjsDoc, fileIdx, start, end, scale) {
+    const BATCH = 3;
+    for (let i = start; i < end; i += BATCH) {
+      const batchEnd = Math.min(i + BATCH, end);
+      for (let j = i; j < batchEnd; j++) {
+        const canvas = document.getElementById(`mtc-${fileIdx}-${j}`);
+        if (!canvas) continue;
+        try {
+          const page = await pdfjsDoc.getPage(j + 1);
+          const viewport = page.getViewport({ scale });
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          const ctx = canvas.getContext('2d');
+          await page.render({ canvasContext: ctx, viewport }).promise;
+        } catch (e) {
+          canvas.style.display = 'none';
+        }
+      }
+      if (batchEnd < end) await new Promise(r => setTimeout(r, 0));
+    }
   }
 
   setupMergeSortable() {
@@ -850,10 +1071,60 @@ class PDFEditTool {
       document.getElementById('file-input').click();
     });
 
+    // Expand/Collapse all
+    document.getElementById('btn-expand-all')?.addEventListener('click', () => {
+      if (!this._mergeExpandedFiles) this._mergeExpandedFiles = new Set();
+      for (let i = 0; i < this.mergeFiles.length; i++) {
+        this._mergeExpandedFiles.add(i);
+      }
+      this.renderMergeResults();
+    });
+
+    document.getElementById('btn-collapse-all')?.addEventListener('click', () => {
+      this._mergeExpandedFiles = new Set();
+      this.renderMergeResults();
+    });
+
+    // Toggle individual file expand
+    document.querySelectorAll('.btn-toggle-pages').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.file);
+        if (!this._mergeExpandedFiles) this._mergeExpandedFiles = new Set();
+        if (this._mergeExpandedFiles.has(idx)) {
+          this._mergeExpandedFiles.delete(idx);
+        } else {
+          this._mergeExpandedFiles.add(idx);
+        }
+        this.renderMergeResults();
+      });
+    });
+
+    // Remove file
     document.querySelectorAll('.btn-remove').forEach(btn => {
       btn.addEventListener('click', () => {
         const idx = parseInt(btn.dataset.remove);
         this.mergeFiles.splice(idx, 1);
+        this._mergePageSelection?.delete(idx);
+        // Re-index remaining selections
+        if (this._mergePageSelection) {
+          const newMap = new Map();
+          let newIdx = 0;
+          for (const [oldIdx, pages] of this._mergePageSelection) {
+            if (oldIdx !== idx) {
+              newMap.set(newIdx, pages);
+              newIdx++;
+            }
+          }
+          this._mergePageSelection = newMap;
+        }
+        if (this._mergeExpandedFiles) {
+          this._mergeExpandedFiles.delete(idx);
+          const newExpanded = new Set();
+          for (const e of this._mergeExpandedFiles) {
+            newExpanded.add(e > idx ? e - 1 : e);
+          }
+          this._mergeExpandedFiles = newExpanded;
+        }
         if (this.mergeFiles.length === 0) {
           document.getElementById('results-area').style.display = 'none';
           document.getElementById('results-area').innerHTML = '';
@@ -867,23 +1138,120 @@ class PDFEditTool {
       });
     });
 
+    // Select all / deselect all per file
+    document.querySelectorAll('[data-select-all]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.selectAll);
+        const f = this.mergeFiles[idx];
+        this._mergePageSelection.set(idx, new Set(Array.from({ length: f.pageCount }, (_, i) => i)));
+        this._updateMergeFileUI(idx);
+        this._updateMergeToolbar();
+      });
+    });
+
+    document.querySelectorAll('[data-deselect-all]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.deselectAll);
+        this._mergePageSelection.set(idx, new Set());
+        this._updateMergeFileUI(idx);
+        this._updateMergeToolbar();
+      });
+    });
+
+    // Click on page thumbnails to toggle
+    this._setupMergePageClicks();
+
+    // Merge action
     document.getElementById('btn-action')?.addEventListener('click', async () => {
-      if (this.mergeFiles.length < 2) return;
+      const selectedTotal = this._countSelectedMergePages();
+      if (selectedTotal === 0) return;
       const btn = document.getElementById('btn-action');
       btn.disabled = true;
       btn.textContent = '⏳ Đang trộn...';
       try {
-        const pdfBytes = await PDFEngine.mergePDFs(this.mergeFiles);
+        const pdfBytes = await this._mergeWithSelection();
         PDFEngine.download(pdfBytes, 'merged.pdf');
         btn.textContent = '✅ Đã tải xong';
-        showToast('PDF đã được trộn thành công!', 'success');
+        showToast(`Đã trộn ${selectedTotal} trang thành công!`, 'success');
       } catch (err) {
         console.error('Merge error:', err);
         showToast('Có lỗi khi trộn PDF', 'error');
       } finally {
-        setTimeout(() => { btn.disabled = false; btn.textContent = '🔀 Trộn thành 1 PDF'; }, 2000);
+        setTimeout(() => { btn.disabled = false; btn.textContent = `🔀 Trộn ${selectedTotal} trang`; }, 2000);
       }
     });
+  }
+
+  _setupMergePageClicks() {
+    document.querySelectorAll('.merge-page-thumb').forEach(thumb => {
+      thumb.addEventListener('click', () => {
+        const fileIdx = parseInt(thumb.dataset.fileIdx);
+        const pageIdx = parseInt(thumb.dataset.pageIdx);
+        const sel = this._mergePageSelection.get(fileIdx);
+        if (!sel) return;
+
+        if (sel.has(pageIdx)) {
+          sel.delete(pageIdx);
+          thumb.classList.remove('selected');
+        } else {
+          sel.add(pageIdx);
+          thumb.classList.add('selected');
+        }
+
+        this._updateMergeFileUI(fileIdx);
+        this._updateMergeToolbar();
+      });
+    });
+  }
+
+  _updateMergeFileUI(fileIdx) {
+    const f = this.mergeFiles[fileIdx];
+    const sel = this._mergePageSelection?.get(fileIdx) || new Set();
+    const countEl = document.getElementById(`merge-sel-${fileIdx}`);
+    if (countEl) {
+      countEl.textContent = sel.size === f.pageCount ? '✅ Tất cả' : `⚠️ ${sel.size}/${f.pageCount}`;
+    }
+    // Update page thumb classes
+    document.querySelectorAll(`.merge-page-thumb[data-file-idx="${fileIdx}"]`).forEach(thumb => {
+      const pageIdx = parseInt(thumb.dataset.pageIdx);
+      thumb.classList.toggle('selected', sel.has(pageIdx));
+    });
+  }
+
+  _updateMergeToolbar() {
+    const selectedTotal = this._countSelectedMergePages();
+    const totalPages = this.mergeFiles.reduce((sum, f) => sum + f.pageCount, 0);
+    const totalEl = document.getElementById('merge-total-pages');
+    const btn = document.getElementById('btn-action');
+    const badge = document.querySelector('.merge-selection-badge');
+
+    if (totalEl) totalEl.textContent = totalPages;
+    if (btn) {
+      btn.disabled = selectedTotal === 0;
+      btn.textContent = `🔀 Trộn ${selectedTotal} trang`;
+    }
+    if (badge) {
+      if (selectedTotal === totalPages) {
+        badge.style.display = 'none';
+      } else {
+        badge.style.display = 'inline';
+        badge.querySelector('strong').textContent = selectedTotal;
+      }
+    }
+  }
+
+  async _mergeWithSelection() {
+    const merged = await PDFLib.PDFDocument.create();
+    for (let i = 0; i < this.mergeFiles.length; i++) {
+      const { pdfDoc } = this.mergeFiles[i];
+      const selected = this._mergePageSelection?.get(i);
+      if (!selected || selected.size === 0) continue;
+
+      const indices = Array.from(selected).sort((a, b) => a - b);
+      const copiedPages = await merged.copyPages(pdfDoc, indices);
+      for (const page of copiedPages) merged.addPage(page);
+    }
+    return await merged.save();
   }
 
   // ─── DRAG INSERT ────────────────────────────────────────────

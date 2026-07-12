@@ -60,7 +60,7 @@ function renderSidebar(activeId) {
     </div>
     <nav class="tool-nav">${nav}</nav>
     <div class="sidebar-footer">
-      <span style="font-size:0.7rem;color:var(--text-muted);">v5.1.0 · 25 tools</span>
+      <span style="font-size:0.7rem;color:var(--text-muted);">v5.2.0 · 25 tools</span>
       <button class="theme-toggle" id="theme-toggle" title="Đổi giao diện">🌙</button>
     </div>`;
 
