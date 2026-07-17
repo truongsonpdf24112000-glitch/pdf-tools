@@ -3,6 +3,7 @@ import { PDFEngine } from '../utils/pdf-engine.js';
 import { showToast, showLoading, hideLoading, formatFileSize, showProgress, escapeHtml } from '../utils/ui-helpers.js';
 
 const MODES = [
+  { id: 'unified', label: 'Tất cả', icon: '🎛️', desc: 'Sắp xếp, xoay, xóa, tách — tất cả trong một' },
   { id: 'reorder', label: 'Sắp xếp', icon: '📑', desc: 'Kéo thả để sắp xếp lại thứ tự trang' },
   { id: 'merge',   label: 'Trộn',   icon: '🔀', desc: 'Gộp nhiều file PDF thành một' },
   { id: 'split',   label: 'Tách',   icon: '✂️', desc: 'Chọn trang muốn tách ra file mới' },
@@ -21,6 +22,7 @@ class PDFEditTool {
     this.pages = [];          // { index, thumbnail, width, height }
 
     // Mode-specific state
+    this.mode = 'unified';
     this.order = [];          // reorder: new page order
     this.mergeFiles = [];     // merge: { file, pdfDoc, pageCount, name, size }
     this.selectedPages = new Set();   // split: selected page indices
@@ -287,11 +289,372 @@ class PDFEditTool {
 
     // Render mode-specific content
     switch (this.mode) {
+      case 'unified': this.renderUnifiedResults(results); break;
       case 'reorder': this.renderReorderResults(results); break;
       case 'split':   this.renderSplitResults(results);   break;
       case 'rotate':  this.renderRotateResults(results);  break;
       case 'delete':  this.renderDeleteResults(results);  break;
     }
+  }
+
+  // ─── UNIFIED MODE (ALL-IN-ONE) ─────────────────────────────
+
+  renderUnifiedResults(results) {
+    const { pages, rotations, deletedPages, selectedPages } = this;
+    const cols = Math.min(pages.length, 6);
+    const rotCount = rotations.size;
+    const delCount = deletedPages.size;
+    const selCount = selectedPages.size;
+
+    results.innerHTML = `
+      <div class="toolbar unified-toolbar" style="flex-wrap:wrap;gap:10px;">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <span class="page-count">📑 ${pages.length} trang</span>
+          <span style="color:var(--text-muted);font-size:0.75rem;">·</span>
+          <button class="btn btn-secondary btn-xs" id="btn-rot-left-all" title="Xoay trái tất cả">↺ Xoay</button>
+          <button class="btn btn-secondary btn-xs" id="btn-rot-right-all" title="Xoay phải tất cả">↻ Xoay</button>
+          ${rotCount > 0 ? `<span class="badge badge-rotate">${rotCount} xoay</span>` : ''}
+          ${rotCount > 0 ? '<button class="btn btn-secondary btn-xs" id="btn-rot-reset-all">↩ Reset</button>' : ''}
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn-secondary btn-xs" id="btn-sel-all-del">🗑️ Chọn hết</button>
+          <button class="btn btn-secondary btn-xs" id="btn-desel-all-del">Bỏ chọn</button>
+          ${delCount > 0 ? `<span class="badge badge-delete">${delCount} xóa</span>` : ''}
+          ${selCount > 0 ? `<span class="badge badge-split">${selCount} tách</span>` : ''}
+        </div>
+        <button class="btn btn-primary" id="btn-action">
+          ⬇️ Tải PDF
+        </button>
+      </div>
+      <div class="range-select-bar">
+        <span class="range-label">🎯 Chọn nhanh:</span>
+        <input type="text" id="range-input" placeholder="vd: 1-5, 8, 10-12">
+        <button class="btn btn-secondary btn-sm" id="btn-apply-range">🗑️ Xóa dải</button>
+        <button class="btn btn-secondary btn-sm" id="btn-split-range">✂️ Tách dải</button>
+        <span class="range-hint">Kéo thả để sắp xếp · Shift+click chọn dải</span>
+      </div>
+      <div class="thumbnail-grid" id="thumbnail-grid"
+           style="grid-template-columns: repeat(${cols}, 190px);">
+        ${pages.map((p, idx) => {
+          const angle = rotations.get(idx) || 0;
+          const isDeleted = deletedPages.has(idx);
+          const isSelected = selectedPages.has(idx);
+          return `
+            <div class="thumbnail-card unified-card ${isDeleted ? 'marked-delete' : ''} ${isSelected ? 'selected' : ''}"
+                 data-page-index="${idx}">
+              <div class="unified-card-top">
+                <button class="chk chk-del ${isDeleted ? 'active' : ''}" data-action="del" data-page="${idx}" title="Đánh dấu xóa">🗑️</button>
+                <button class="chk chk-split ${isSelected ? 'active' : ''}" data-action="split" data-page="${idx}" title="Chọn để tách">✂️</button>
+              </div>
+              <div class="thumbnail-wrapper" id="tw-${idx}" style="transition: transform 0.3s ease;${angle ? `transform: rotate(${angle}deg);` : ''}">
+                <img src="${p.thumbnail}" alt="Trang ${idx + 1}" width="${p.width}" height="${p.height}">
+              </div>
+              <div class="unified-card-bottom">
+                <button class="btn-rotate" data-action="ccw" data-page="${idx}" title="Xoay trái">↺</button>
+                <span class="page-number" id="pn-${idx}">${idx + 1}</span>
+                ${angle ? `<span class="rotate-badge" id="rb-${idx}">${angle}°</span>` : ''}
+                <button class="btn-rotate" data-action="cw" data-page="${idx}" title="Xoay phải">↻</button>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+      <div class="shortcut-hint" style="margin-top:12px;">
+        <span class="kbd">Ctrl</span>+<span class="kbd">S</span> Tải &nbsp;|&nbsp;
+        <span class="kbd">←</span><span class="kbd">→</span> Xoay &nbsp;|&nbsp;
+        Kéo thả để sắp xếp
+      </div>
+    `;
+
+    this.setupUnifiedControls();
+    this.setupUnifiedDownload();
+    this.setupUnifiedRangeInput();
+  }
+
+  setupUnifiedControls() {
+    // --- SortableJS for reorder ---
+    const grid = document.getElementById('thumbnail-grid');
+    if (this.sortableInstance) this.sortableInstance.destroy();
+    this.sortableInstance = new Sortable(grid, {
+      animation: 200,
+      easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+      ghostClass: 'sortable-ghost',
+      chosenClass: 'sortable-chosen',
+      dragClass: 'sortable-drag',
+      onEnd: () => {
+        const cards = document.querySelectorAll('.unified-card');
+        const newOrder = [];
+        cards.forEach((card, i) => {
+          newOrder.push(parseInt(card.dataset.pageIndex));
+          const numEl = card.querySelector('.page-number');
+          if (numEl) numEl.textContent = i + 1;
+        });
+        this.order = newOrder;
+      }
+    });
+
+    // --- Individual card controls ---
+    grid.addEventListener('click', (e) => {
+      const card = e.target.closest('.unified-card');
+      if (!card) return;
+      const idx = parseInt(card.dataset.pageIndex);
+
+      // Rotate buttons
+      const rotBtn = e.target.closest('.btn-rotate');
+      if (rotBtn) {
+        e.stopPropagation();
+        const action = rotBtn.dataset.action;
+        let angle = this.rotations.get(idx) || 0;
+        angle = action === 'cw' ? ((angle + 90) % 360 + 360) % 360 : ((angle - 90) % 360 + 360) % 360;
+        if (angle === 0 || angle === 360) this.rotations.delete(idx);
+        else this.rotations.set(idx, angle);
+        this._unifiedUpdateCardUI(idx);
+        this._unifiedUpdateToolbar();
+        return;
+      }
+
+      // Delete checkbox
+      const delChk = e.target.closest('.chk-del');
+      if (delChk) {
+        e.stopPropagation();
+        if (this.deletedPages.has(idx)) this.deletedPages.delete(idx);
+        else this.deletedPages.add(idx);
+        card.classList.toggle('marked-delete');
+        delChk.classList.toggle('active');
+        // Deselect from split if deleted
+        if (this.deletedPages.has(idx) && this.selectedPages.has(idx)) {
+          this.selectedPages.delete(idx);
+          card.classList.remove('selected');
+          card.querySelector('.chk-split')?.classList.remove('active');
+        }
+        this._unifiedUpdateToolbar();
+        return;
+      }
+
+      // Split checkbox
+      const splitChk = e.target.closest('.chk-split');
+      if (splitChk) {
+        e.stopPropagation();
+        if (this.selectedPages.has(idx)) this.selectedPages.delete(idx);
+        else if (!this.deletedPages.has(idx)) this.selectedPages.add(idx);
+        card.classList.toggle('selected');
+        splitChk.classList.toggle('active');
+        this._unifiedUpdateToolbar();
+        return;
+      }
+    });
+
+    // --- Toolbar: Rotate All ---
+    document.getElementById('btn-rot-left-all')?.addEventListener('click', () => {
+      for (let i = 0; i < this.pages.length; i++) {
+        let angle = this.rotations.get(i) || 0;
+        angle = ((angle - 90) % 360 + 360) % 360;
+        if (angle === 0 || angle === 360) this.rotations.delete(i);
+        else this.rotations.set(i, angle);
+        this._unifiedUpdateCardUI(i);
+      }
+      this._unifiedUpdateToolbar();
+    });
+    document.getElementById('btn-rot-right-all')?.addEventListener('click', () => {
+      for (let i = 0; i < this.pages.length; i++) {
+        let angle = this.rotations.get(i) || 0;
+        angle = ((angle + 90) % 360 + 360) % 360;
+        if (angle === 0 || angle === 360) this.rotations.delete(i);
+        else this.rotations.set(i, angle);
+        this._unifiedUpdateCardUI(i);
+      }
+      this._unifiedUpdateToolbar();
+    });
+    document.getElementById('btn-rot-reset-all')?.addEventListener('click', () => {
+      for (let i = 0; i < this.pages.length; i++) {
+        this.rotations.delete(i);
+        this._unifiedUpdateCardUI(i);
+      }
+      this._unifiedUpdateToolbar();
+    });
+
+    // --- Toolbar: Delete All / Deselect All ---
+    document.getElementById('btn-sel-all-del')?.addEventListener('click', () => {
+      this.pages.forEach((_, i) => {
+        this.deletedPages.add(i);
+        if (this.selectedPages.has(i)) this.selectedPages.delete(i);
+      });
+      this._unifiedRefreshAllCards();
+      this._unifiedUpdateToolbar();
+    });
+    document.getElementById('btn-desel-all-del')?.addEventListener('click', () => {
+      this.deletedPages = new Set();
+      this._unifiedRefreshAllCards();
+      this._unifiedUpdateToolbar();
+    });
+  }
+
+  // Update a single card UI (rotate + badges) without full re-render
+  _unifiedUpdateCardUI(idx) {
+    const angle = this.rotations.get(idx) || 0;
+    const wrapper = document.getElementById(`tw-${idx}`);
+    if (wrapper) wrapper.style.transform = angle ? `rotate(${angle}deg)` : '';
+
+    const badge = document.getElementById(`rb-${idx}`);
+    if (angle && angle !== 0 && angle !== 360) {
+      if (badge) badge.textContent = angle + '°';
+      else {
+        const pn = document.getElementById(`pn-${idx}`);
+        if (pn) {
+          const b = document.createElement('span');
+          b.className = 'rotate-badge';
+          b.id = `rb-${idx}`;
+          b.textContent = angle + '°';
+          pn.insertAdjacentElement('afterend', b);
+        }
+      }
+    } else if (badge) {
+      badge.remove();
+    }
+  }
+
+  // Refresh all cards to reflect delete/select state
+  _unifiedRefreshAllCards() {
+    document.querySelectorAll('.unified-card').forEach(card => {
+      const idx = parseInt(card.dataset.pageIndex);
+      const isDel = this.deletedPages.has(idx);
+      const isSel = this.selectedPages.has(idx);
+      card.classList.toggle('marked-delete', isDel);
+      card.classList.toggle('selected', isSel && !isDel);
+      const delChk = card.querySelector('.chk-del');
+      if (delChk) delChk.classList.toggle('active', isDel);
+      const splitChk = card.querySelector('.chk-split');
+      if (splitChk) splitChk.classList.toggle('active', isSel);
+    });
+  }
+
+  // Update toolbar counters
+  _unifiedUpdateToolbar() {
+    const rotCount = this.rotations.size;
+    const delCount = this.deletedPages.size;
+    const selCount = this.selectedPages.size;
+
+    // Update badges
+    const updateBadge = (cls, text) => {
+      const existing = document.querySelector(`.badge-${cls}`);
+      if (text && !existing) {
+        const b = document.createElement('span');
+        b.className = `badge badge-${cls}`;
+        b.textContent = text;
+        const toolbar = document.querySelector('.unified-toolbar');
+        if (toolbar) toolbar.appendChild(b);
+      } else if (text && existing) {
+        existing.textContent = text;
+      } else if (!text && existing) {
+        existing.remove();
+      }
+    };
+    updateBadge('rotate', rotCount > 0 ? `${rotCount} xoay` : '');
+    updateBadge('delete', delCount > 0 ? `${delCount} xóa` : '');
+    updateBadge('split', selCount > 0 ? `${selCount} tách` : '');
+
+    // Show/hide reset button
+    const resetBtn = document.getElementById('btn-rot-reset-all');
+    if (rotCount > 0 && !resetBtn) {
+      const rightAll = document.getElementById('btn-rot-right-all');
+      if (rightAll) {
+        const b = document.createElement('button');
+        b.className = 'btn btn-secondary btn-xs';
+        b.id = 'btn-rot-reset-all';
+        b.textContent = '↩ Reset';
+        b.addEventListener('click', () => {
+          for (let i = 0; i < this.pages.length; i++) {
+            this.rotations.delete(i);
+            this._unifiedUpdateCardUI(i);
+          }
+          this._unifiedUpdateToolbar();
+        });
+        rightAll.insertAdjacentElement('afterend', b);
+      }
+    } else if (rotCount === 0 && resetBtn) {
+      resetBtn.remove();
+    }
+  }
+
+  setupUnifiedDownload() {
+    document.getElementById('btn-action')?.addEventListener('click', async () => {
+      const remaining = this.pages.length - this.deletedPages.size;
+      if (remaining === 0) {
+        showToast('Không thể tải PDF rỗng (tất cả trang đã bị xóa)', 'error');
+        return;
+      }
+      const btn = document.getElementById('btn-action');
+      btn.disabled = true; btn.textContent = '⏳ Đang xử lý...';
+      try {
+        const pdfBytes = await this._buildUnifiedPDF();
+        PDFEngine.download(pdfBytes, this.fileName.replace(/\.pdf$/i, '_chinhsua.pdf'));
+        btn.textContent = '✅ Đã tải xong';
+        showToast('PDF đã được xử lý!', 'success');
+      } catch (err) {
+        console.error('Unified build error:', err);
+        showToast('Có lỗi khi xử lý PDF', 'error');
+      } finally {
+        setTimeout(() => { btn.disabled = false; btn.textContent = '⬇️ Tải PDF'; }, 2000);
+      }
+    });
+  }
+
+  async _buildUnifiedPDF() {
+    const { pdfDoc, order, rotations, deletedPages } = this;
+
+    // Determine final page order
+    const displayOrder = order.length > 0 ? order : this.pages.map((_, i) => i);
+
+    // Build new PDF applying reorder, rotations, and skipping deleted pages
+    const newDoc = await PDFLib.PDFDocument.create();
+    const srcPages = pdfDoc.getPages();
+
+    for (const srcIdx of displayOrder) {
+      if (deletedPages.has(srcIdx)) continue;
+
+      const [copiedPage] = await newDoc.copyPages(pdfDoc, [srcIdx]);
+      const angle = rotations.get(srcIdx);
+      if (angle) {
+        copiedPage.setRotation(PDFLib.degrees(angle));
+      }
+      newDoc.addPage(copiedPage);
+    }
+
+    return await newDoc.save();
+  }
+
+  async _applyAllChanges() {
+    const pdfBytes = await this._buildUnifiedPDF();
+    await this._reloadPdfFromBytes(pdfBytes);
+    showToast('✅ Đã áp dụng tất cả thay đổi', 'success');
+    return true;
+  }
+
+  setupUnifiedRangeInput() {
+    document.getElementById('btn-apply-range')?.addEventListener('click', () => this._applyRange('del'));
+    document.getElementById('btn-split-range')?.addEventListener('click', () => this._applyRange('split'));
+    document.getElementById('range-input')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') this._applyRange('del');
+    });
+  }
+
+  _applyRange(target) {
+    const input = document.getElementById('range-input');
+    if (!input || !input.value.trim()) return;
+    const parsed = this._parsePageRange(input.value.trim(), this.pages.length);
+    if (parsed.error) { showToast(parsed.error, 'error'); return; }
+
+    for (const idx of parsed.indices) {
+      if (target === 'del') {
+        this.deletedPages.add(idx);
+        if (this.selectedPages.has(idx)) this.selectedPages.delete(idx);
+      } else {
+        if (!this.deletedPages.has(idx)) this.selectedPages.add(idx);
+      }
+    }
+    this._unifiedRefreshAllCards();
+    this._unifiedUpdateToolbar();
+    showToast(`Đã ${target === 'del' ? 'đánh dấu xóa' : 'chọn tách'} ${parsed.indices.length} trang`, 'success');
   }
 
   // ─── REORDER MODE ──────────────────────────────────────────
@@ -690,8 +1053,10 @@ class PDFEditTool {
    */
   hasPendingChanges() {
     switch (this.mode) {
+      case 'unified':
       case 'rotate':
-        return this.rotations.size > 0;
+        return this.rotations.size > 0 || this.deletedPages.size > 0
+          || (this.order.length > 0 && this.order.some((pageIdx, pos) => pageIdx !== pos));
       case 'delete':
         return this.deletedPages.size > 0;
       case 'reorder':
@@ -711,6 +1076,8 @@ class PDFEditTool {
    */
   async applyCurrentChanges() {
     switch (this.mode) {
+      case 'unified':
+        return await this._applyAllChanges();
       case 'rotate':
         return await this._applyRotateChanges();
       case 'delete':

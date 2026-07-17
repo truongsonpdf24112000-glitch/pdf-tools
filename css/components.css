@@ -968,6 +968,101 @@
   font-size: 1rem;
 }
 
+.btn-xs {
+  padding: 5px 10px;
+  font-size: 0.75rem;
+  gap: 4px;
+}
+
+/* ===== Unified Mode (All-in-One) ===== */
+.unified-card {
+  position: relative;
+}
+
+.unified-card-top {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  right: 4px;
+  display: flex;
+  justify-content: space-between;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.unified-card-top .chk {
+  pointer-events: auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 2px solid rgba(255,255,255,0.3);
+  background: rgba(0,0,0,0.5);
+  color: rgba(255,255,255,0.4);
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(4px);
+}
+
+.unified-card-top .chk:hover {
+  border-color: rgba(255,255,255,0.6);
+  color: #fff;
+  background: rgba(0,0,0,0.7);
+}
+
+.chk-del.active {
+  background: rgba(220, 53, 69, 0.85) !important;
+  border-color: #dc3545 !important;
+  color: #fff !important;
+}
+
+.chk-split.active {
+  background: rgba(0, 184, 148, 0.85) !important;
+  border-color: #00b894 !important;
+  color: #fff !important;
+}
+
+.unified-card-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.unified-card-bottom .btn-rotate {
+  width: 24px;
+  height: 24px;
+  font-size: 11px;
+  padding: 0;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.unified-card-bottom .btn-rotate:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Badge counters */
+.badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+.badge-rotate { background: var(--accent-soft); color: var(--accent); }
+.badge-delete { background: rgba(220,53,69,0.15); color: #dc3545; }
+.badge-split  { background: rgba(0,184,148,0.15); color: #00b894; }
+
 /* ===== Lock/Unlock Tool ===== */
 .lock-card {
   max-width: 480px;
