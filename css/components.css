@@ -39,6 +39,22 @@
   border-color: var(--accent);
 }
 
+.btn-accent {
+  background: #00b894;
+  color: #fff;
+}
+
+.btn-accent:hover {
+  background: #00a381;
+  box-shadow: 0 0 16px rgba(0, 184, 148, 0.4);
+}
+
+.btn-accent:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
 /* ===== Upload Zone ===== */
 .upload-zone {
   border: 2px dashed var(--border);

@@ -121,11 +121,15 @@ class PDFEditTool {
     `;
   }
 
-  bindModeButtons() {
+  async bindModeButtons() {
     document.querySelectorAll('.mode-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const newMode = btn.dataset.mode;
         if (newMode !== this.mode) {
+          // Auto-apply pending changes before switching mode
+          if (this.hasPendingChanges()) {
+            await this.applyCurrentChanges();
+          }
           this.mode = newMode;
           // Update file input multiple attr
           const input = document.getElementById('file-input');
@@ -472,6 +476,7 @@ class PDFEditTool {
         <button class="btn btn-primary" id="btn-action">
           ⬇️ Tải PDF${hasRotations ? ' đã xoay' : ''}
         </button>
+        ${hasRotations ? '<button class="btn btn-accent" id="btn-apply-reorder" title="Áp dụng xoay và chuyển sang Sắp xếp">📑 Áp dụng & Sắp xếp</button>' : ''}
       </div>
       <div class="thumbnail-grid" id="thumbnail-grid"
            style="grid-template-columns: repeat(${cols}, 200px);">
@@ -564,6 +569,11 @@ class PDFEditTool {
         this.updateRotateCardUI(i, 0);
       }
     });
+
+    // Apply & Switch to Reorder
+    document.getElementById('btn-apply-reorder')?.addEventListener('click', () => {
+      this.applyRotateAndSwitchToReorder();
+    });
   }
 
   // Update a single card's rotation UI instantly (no re-render)
@@ -625,6 +635,23 @@ class PDFEditTool {
     } else if (!hasRotations && resetBtn) {
       resetBtn.remove();
     }
+
+    // Show/hide apply-reorder button
+    let applyBtn = document.getElementById('btn-apply-reorder');
+    if (hasRotations && !applyBtn) {
+      const actionBtn = document.getElementById('btn-action');
+      if (actionBtn) {
+        applyBtn = document.createElement('button');
+        applyBtn.className = 'btn btn-accent';
+        applyBtn.id = 'btn-apply-reorder';
+        applyBtn.textContent = '📑 Áp dụng & Sắp xếp';
+        applyBtn.title = 'Áp dụng xoay và chuyển sang Sắp xếp';
+        applyBtn.addEventListener('click', () => this.applyRotateAndSwitchToReorder());
+        actionBtn.insertAdjacentElement('afterend', applyBtn);
+      }
+    } else if (!hasRotations && applyBtn) {
+      applyBtn.remove();
+    }
   }
 
   setupRotateDownload() {
@@ -654,6 +681,179 @@ class PDFEditTool {
     });
   }
 
+  // ─── AUTO-APPLY CHANGES SYSTEM ─────────────────────────────
+  // Khi chuyển mode, hệ thống tự động áp dụng pending changes
+  // để PDF luôn đồng bộ giữa các mode. Không cần download/upload lại.
+
+  /**
+   * Kiểm tra mode hiện tại có thay đổi chưa áp dụng không.
+   */
+  hasPendingChanges() {
+    switch (this.mode) {
+      case 'rotate':
+        return this.rotations.size > 0;
+      case 'delete':
+        return this.deletedPages.size > 0;
+      case 'reorder':
+        // Check if order differs from default sequential order
+        if (this.order.length !== this.pages.length) return false;
+        return this.order.some((pageIdx, pos) => pageIdx !== pos);
+      case 'merge':
+        return this.mergeFiles.length > 0;
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * Áp dụng pending changes của mode hiện tại vào PDF, reload state.
+   * @returns {Promise<boolean>} true nếu có thay đổi được áp dụng
+   */
+  async applyCurrentChanges() {
+    switch (this.mode) {
+      case 'rotate':
+        return await this._applyRotateChanges();
+      case 'delete':
+        return await this._applyDeleteChanges();
+      case 'reorder':
+        return await this._applyReorderChanges();
+      case 'merge':
+        return await this._applyMergeChanges();
+      default:
+        return false;
+    }
+  }
+
+  async _applyRotateChanges() {
+    const cleanRotations = new Map();
+    for (const [idx, angle] of this.rotations.entries()) {
+      if (angle !== 0 && angle !== 360) cleanRotations.set(idx, angle);
+    }
+    if (cleanRotations.size === 0) return false;
+
+    const pdfBytes = await PDFEngine.rotatePages(this.pdfDoc, cleanRotations);
+    await this._reloadPdfFromBytes(pdfBytes);
+    showToast(`✅ Đã áp dụng xoay ${cleanRotations.size} trang`, 'success');
+    return true;
+  }
+
+  async _applyDeleteChanges() {
+    if (this.deletedPages.size === 0) return false;
+    const deleteCount = this.deletedPages.size;
+    const keepIndices = this.pages.map((_, i) => i).filter(i => !this.deletedPages.has(i));
+    if (keepIndices.length === 0) return false;
+
+    const pdfBytes = await PDFEngine.deletePages(this.pdfDoc, keepIndices);
+    await this._reloadPdfFromBytes(pdfBytes);
+    showToast(`✅ Đã xóa ${deleteCount} trang`, 'success');
+    return true;
+  }
+
+  async _applyReorderChanges() {
+    // Check if actually reordered
+    if (!this.order.some((pageIdx, pos) => pageIdx !== pos)) return false;
+
+    const pdfBytes = await PDFEngine.reorderAndSave(this.pdfDoc, this.order);
+    await this._reloadPdfFromBytes(pdfBytes);
+    showToast('✅ Đã áp dụng sắp xếp', 'success');
+    return true;
+  }
+
+  async _applyMergeChanges() {
+    const selectedDocs = [];
+    for (let i = 0; i < this.mergeFiles.length; i++) {
+      const f = this.mergeFiles[i];
+      const sel = this._mergePageSelection?.get(i);
+      if (!sel || sel.size === 0) continue;
+
+      if (sel.size === f.pageCount) {
+        // All pages selected — use full doc
+        selectedDocs.push({ pdfDoc: f.pdfDoc });
+      } else {
+        // Partial selection — extract selected pages
+        const indices = Array.from(sel).sort((a, b) => a - b);
+        const extractedBytes = await PDFEngine.extractPages(f.pdfDoc, indices);
+        const { pdfDoc } = await PDFEngine.load(extractedBytes.buffer);
+        selectedDocs.push({ pdfDoc });
+      }
+    }
+    if (selectedDocs.length === 0) return false;
+
+    const pdfBytes = await PDFEngine.mergePDFs(selectedDocs);
+    await this._reloadPdfFromBytes(pdfBytes);
+    this.mergeFiles = [];
+    if (this._mergePageSelection) this._mergePageSelection = new Map();
+    if (this._mergeExpandedFiles) this._mergeExpandedFiles = new Set();
+    showToast(`✅ Đã trộn ${this.pages.length} trang`, 'success');
+    return true;
+  }
+
+  /**
+   * Reload PDF từ bytes, cập nhật toàn bộ state.
+   */
+  async _reloadPdfFromBytes(pdfBytes) {
+    const { pdfDoc, pdfjsDoc } = await PDFEngine.load(pdfBytes.buffer);
+    this.pdfDoc = pdfDoc;
+    this.pdfjsDoc = pdfjsDoc;
+    this.pages = await PDFEngine.renderThumbnailsWithProgress(pdfjsDoc, 0.35);
+
+    // Reset all pending state
+    this.order = this.pages.map((_, i) => i);
+    this.selectedPages = new Set();
+    this.rotations = new Map();
+    this.deletedPages = new Set();
+  }
+
+  /**
+   * Convenience: áp dụng xoay rồi chuyển sang mode sắp xếp.
+   * Giữ lại cho nút "Áp dụng & Sắp xếp".
+   */
+  async applyRotateAndSwitchToReorder() {
+    if (this.hasPendingChanges()) {
+      const btn = document.getElementById('btn-apply-reorder');
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang áp dụng...'; }
+      try {
+        await this.applyCurrentChanges();
+        this.mode = 'reorder';
+        this.render();
+        this.renderSingleResults();
+        showToast('✅ Đã áp dụng xoay và chuyển sang Sắp xếp!', 'success');
+      } catch (err) {
+        console.error('Apply error:', err);
+        showToast('Có lỗi khi áp dụng. Thử lại nhé.', 'error');
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '📑 Áp dụng & Sắp xếp'; }
+      }
+    } else {
+      this.mode = 'reorder';
+      this.render();
+      this.renderSingleResults();
+      showToast('Đã chuyển sang chế độ Sắp xếp', 'info');
+    }
+  }
+
+  /**
+   * Convenience: áp dụng xóa ngay, giữ PDF trong bộ nhớ để tiếp tục chỉnh sửa.
+   */
+  async _applyDeleteNow() {
+    if (this.deletedPages.size === 0) return;
+    const deleteCount = this.deletedPages.size;
+    const btn = document.getElementById('btn-apply-delete');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳...'; }
+    try {
+      await this.applyCurrentChanges();
+      // Re-render delete mode with fresh state
+      this.render();
+      this.renderSingleResults();
+      showToast(`✅ Đã áp dụng xóa ${deleteCount} trang`, 'success');
+    } catch (err) {
+      console.error('Apply delete error:', err);
+      showToast('Có lỗi khi áp dụng xóa', 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '✅ Áp dụng'; }
+    }
+  }
+
   // ─── DELETE MODE ───────────────────────────────────────────
 
   renderDeleteResults(results) {
@@ -671,6 +871,7 @@ class PDFEditTool {
         <button class="btn btn-primary" id="btn-action" ${deletedPages.size === 0 ? 'disabled' : ''}>
           🗑️ Xóa <span id="delete-count">${deletedPages.size}</span> trang
         </button>
+        ${deletedPages.size > 0 ? '<button class="btn btn-accent btn-sm" id="btn-apply-delete" title="Áp dụng xóa và giữ PDF trong bộ nhớ">✅ Áp dụng</button>' : ''}
       </div>
       <div class="range-select-bar">
         <span class="range-label">🎯 Chọn nhanh:</span>
@@ -699,6 +900,8 @@ class PDFEditTool {
     this.setupDeleteSelection();
     this.setupDeleteAction();
     this.setupRangeInput();
+    // Bind apply-delete button (created in HTML template)
+    document.getElementById('btn-apply-delete')?.addEventListener('click', () => this._applyDeleteNow());
   }
 
   setupDeleteSelection() {
@@ -759,6 +962,23 @@ class PDFEditTool {
     if (btn) {
       btn.disabled = this.deletedPages.size === 0;
       btn.innerHTML = `🗑️ Xóa <span id="delete-count">${this.deletedPages.size}</span> trang`;
+    }
+
+    // Show/hide apply-delete button
+    let applyBtn = document.getElementById('btn-apply-delete');
+    if (this.deletedPages.size > 0 && !applyBtn) {
+      const actionBtn = document.getElementById('btn-action');
+      if (actionBtn) {
+        applyBtn = document.createElement('button');
+        applyBtn.className = 'btn btn-accent btn-sm';
+        applyBtn.id = 'btn-apply-delete';
+        applyBtn.textContent = '✅ Áp dụng';
+        applyBtn.title = 'Áp dụng xóa và giữ PDF trong bộ nhớ';
+        applyBtn.addEventListener('click', () => this._applyDeleteNow());
+        actionBtn.insertAdjacentElement('afterend', applyBtn);
+      }
+    } else if (this.deletedPages.size === 0 && applyBtn) {
+      applyBtn.remove();
     }
   }
 
