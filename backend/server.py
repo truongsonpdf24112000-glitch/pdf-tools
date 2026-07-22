@@ -169,10 +169,10 @@ ALLOWED_EXTENSIONS = {
 # Magic bytes for file type validation
 MAGIC_BYTES = {
     b'%PDF': '.pdf',
-    b'PK\\x03\\x04': '.docx',  # ZIP-based Office formats
-    b'\\xd0\\xcf\\x11\\xe0': '.doc',   # OLE2 (legacy Office)
-    b'\\xff\\xd8\\xff': '.jpg',
-    b'\\x89PNG\\r\\n': '.png',
+    b'PK\x03\x04': '.docx',  # ZIP-based Office formats
+    b'\xd0\xcf\x11\xe0': '.doc',   # OLE2 (legacy Office)
+    b'\xff\xd8\xff': '.jpg',
+    b'\x89PNG\r\n': '.png',
     b'GIF8': '.gif',
     b'BM': '.bmp',
     b'RIFF': '.webp',
