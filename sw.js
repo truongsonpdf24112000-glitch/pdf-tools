@@ -1,5 +1,5 @@
 // sw.js — Service Worker for Chỉnh Sửa PDF (PWA)
-const CACHE_NAME = 'pdf-tools-v5.1.0';
+const CACHE_NAME = 'pdf-tools-v6.0.0';
 const ASSETS = [
   '/pdf-tools/',
   '/pdf-tools/index.html',

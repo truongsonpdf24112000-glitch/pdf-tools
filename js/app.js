@@ -45,7 +45,7 @@ function renderSidebar(activeId) {
     <div class="tool-group">
       <div class="tool-group-label">${GROUP_LABELS[key] || key}</div>
       ${tools.map(t => `
-        <a href="#${t.id}" class="tool-item ${t.id===activeId?'active':''} ${t.status}" data-tool="${t.id}">
+        <a href="#${t.id}" class="tool-item ${t.id===activeId?'active':''} ${t.status==='coming-soon'?'coming-soon':''}" data-tool="${t.id}">
           <span class="tool-icon">${t.icon}</span>
           <span class="tool-name">${t.name}</span>
         </a>
@@ -60,7 +60,7 @@ function renderSidebar(activeId) {
     </div>
     <nav class="tool-nav">${nav}</nav>
     <div class="sidebar-footer">
-      <span style="font-size:0.7rem;color:var(--text-muted);">v5.4.0 · 25 tools</span>
+      <span style="font-size:0.7rem;color:var(--text-muted);">v6.0.0 · 25 tools</span>
       <button class="theme-toggle" id="theme-toggle" title="Đổi giao diện">🌙</button>
     </div>`;
 
@@ -135,7 +135,7 @@ function showHome() {
       <p class="hero-desc">Xử lý <strong>100% trên trình duyệt</strong>. File của bạn <strong>không bao giờ rời khỏi máy</strong>.</p>
       <div class="hero-stats">
         <div class="hero-stat"><strong>25</strong><span>công cụ</span></div>
-        <div class="hero-stat"><strong>0₫</strong><span>miễn phí</span></div>
+        <div class="hero-stat"><strong>0đ</strong><span>miễn phí</span></div>
         <div class="hero-stat"><strong>100%</strong><span>bảo mật</span></div>
       </div>
     </div>

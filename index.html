@@ -3,8 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#0b0b1a">
+  <meta name="theme-color" content="#0b1020">
   <meta name="color-scheme" content="dark light">
+
+  <!-- Google Fonts — Space Grotesk (display) + Inter (body) + JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 
   <!-- SEO Meta -->
   <title>Chỉnh Sửa PDF — Công Cụ PDF Miễn Phí Online</title>
@@ -56,9 +61,9 @@
   <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%236c5ce7'/><text y='.72em' font-size='60' text-anchor='middle' x='50' fill='white'>📄</text></svg>">
 
   <!-- Styles -->
-  <link rel="stylesheet" href="css/base.css">
-  <link rel="stylesheet" href="css/layout.css">
-  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/base.css?v=6.0.5">
+  <link rel="stylesheet" href="css/layout.css?v=6.0.5">
+  <link rel="stylesheet" href="css/components.css?v=6.0.5">
 
   <!-- Libraries (CDN) -->
   <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js" defer></script>
@@ -90,18 +95,20 @@
     <div class="footer-content">
       <div class="footer-brand">
         <strong>Chỉnh Sửa PDF</strong>
-        <span>v5.2.0 · 4 nhóm công cụ + PWA</span>
+        <span>v6.0.0 · 4 nhóm công cụ + PWA</span>
       </div>
       <div class="footer-links">
         <span>Xử lý 100% trên trình duyệt — File không rời khỏi máy bạn</span>
       </div>
       <div class="footer-copy">
-        © 2026 · Mã nguồn mở MIT
+        © <span id="footer-year">2026</span> · Mã nguồn mở MIT
       </div>
     </div>
   </footer>
 
-  <script type="module" src="js/app.js"></script>
+  <script>document.getElementById('footer-year').textContent = new Date().getFullYear();</script>
+
+  <script type="module" src="js/app.js?v=6.0.5"></script>
   <script>
     // Register Service Worker for PWA offline support
     if ('serviceWorker' in navigator) {
