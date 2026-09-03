@@ -1,0 +1,87 @@
+{
+  "name": "pdf-tools-desktop",
+  "productName": "PDF Tools",
+  "version": "6.0.6",
+  "description": "PDF Tools Desktop - 25 cong cu xu ly PDF chay offline tren may tinh",
+  "main": "main.cjs",
+  "author": "truongsonpdf24112000-glitch",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win",
+    "dist:portable": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "vn.gafo.pdftools",
+    "productName": "PDF Tools",
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "files": [
+      "main.cjs",
+      "vendor/**",
+      "fonts/**",
+      "icon_32.png",
+      "build/icon.png",
+      "build/icon_512.png"
+    ],
+    "extraResources": [
+      {
+        "from": "../index.html",
+        "to": "web/index.html"
+      },
+      {
+        "from": "../css",
+        "to": "web/css"
+      },
+      {
+        "from": "../js",
+        "to": "web/js"
+      },
+      {
+        "from": "../manifest.json",
+        "to": "web/manifest.json"
+      },
+      {
+        "from": "../sw.js",
+        "to": "web/sw.js"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "PDF Tools"
+    },
+    "portable": {
+      "artifactName": "PDF-Tools-Portable.exe"
+    }
+  },
+  "dependencies": {
+    "playwright-core": "^1.62.1"
+  }
+}
